@@ -1,5 +1,6 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.cfg.JsonNodeFeature;
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -24,6 +26,7 @@ final class FioStatementParser {
     private static final Pattern DATE_WITH_OPTIONAL_OFFSET = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})(Z|[+-]\\d{2}:?\\d{2})?");
     private static final Pattern EPOCH_MILLISECONDS = Pattern.compile("-?\\d{1,18}");
     private static final Pattern COLUMN_KEY = Pattern.compile("column(\\d{1,9})");
+    private static final Pattern DOMESTIC_ACCOUNT = Pattern.compile("(?:\\d{1,6}-)?\\d{1,10}");
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(JsonNodeFeature.USE_BIG_DECIMAL_FOR_FLOATS)
@@ -33,7 +36,7 @@ final class FioStatementParser {
     FioStatement parse(String json) {
         JsonNode statement = readTree(json).path("accountStatement");
         if (!statement.isObject()) {
-            throw new MalformedStatementException("The body has no accountStatement object");
+            throw new MalformedResponseException("The body has no accountStatement object");
         }
         return new FioStatement(
                 info(statement.path("info")),
@@ -44,28 +47,49 @@ final class FioStatementParser {
         try {
             return mapper.readTree(json);
         } catch (JacksonException e) {
-            throw new MalformedStatementException("The body is not valid JSON", e);
+            throw new MalformedResponseException("The body is not valid JSON", e);
         }
     }
 
     private FioAccountInfo info(JsonNode info) {
         if (!info.isObject()) {
-            throw new MalformedStatementException("The statement has no info object");
+            throw new MalformedResponseException("The statement has no info object");
         }
         Function<String, RawValue> field = name -> new RawValue("info." + name, textOf(info.get(name)));
+        Currency currency = field.apply("currency").requiredCurrency();
+        Integer year = field.apply("yearList").optionalInt();
+        Integer number = field.apply("idList").optionalInt();
         return new FioAccountInfo(
-                field.apply("accountId").requiredText(),
-                field.apply("bankId").optionalText(),
-                field.apply("currency").requiredText(),
+                account(field.apply("accountId"), field.apply("bankId")),
                 field.apply("iban").requiredText(),
                 field.apply("bic").requiredText(),
-                field.apply("openingBalance").requiredDecimal(),
-                field.apply("closingBalance").requiredDecimal(),
+                currency,
+                new Money(field.apply("openingBalance").requiredDecimal(), currency),
+                new Money(field.apply("closingBalance").requiredDecimal(), currency),
                 field.apply("dateStart").optionalDate(),
                 field.apply("dateEnd").optionalDate(),
+                year == null || number == null ? null : statementId(year, number),
                 field.apply("idFrom").optionalLong(),
                 field.apply("idTo").optionalLong(),
                 field.apply("idLastDownload").optionalLong());
+    }
+
+    private static DomesticAccount account(RawValue accountId, RawValue bankId) {
+        String number = accountId.requiredText();
+        String bankCode = bankId.optionalText();
+        try {
+            return DomesticAccount.parse(bankCode == null ? number : number + "/" + bankCode);
+        } catch (IllegalArgumentException e) {
+            throw new MalformedResponseException(accountId.label() + " is not an account number: '" + number + "'", e);
+        }
+    }
+
+    private static StatementId statementId(int year, int number) {
+        try {
+            return new StatementId(year, number);
+        } catch (IllegalArgumentException e) {
+            throw new MalformedResponseException("info.yearList and info.idList are not a statement number", e);
+        }
     }
 
     private List<FioTransaction> transactions(JsonNode transactions) {
@@ -73,7 +97,7 @@ final class FioStatementParser {
             return List.of();
         }
         if (!transactions.isArray()) {
-            throw new MalformedStatementException("transactionList.transaction is not an array");
+            throw new MalformedResponseException("transactionList.transaction is not an array");
         }
         List<FioTransaction> parsed = new ArrayList<>();
         for (JsonNode transaction : transactions) {
@@ -84,32 +108,58 @@ final class FioStatementParser {
 
     private FioTransaction transaction(JsonNode transaction) {
         if (!transaction.isObject()) {
-            throw new MalformedStatementException("A transaction is not an object");
+            throw new MalformedResponseException("A transaction is not an object");
         }
         Map<Integer, FioColumn> columns = columns(transaction);
         Function<Column, RawValue> column = known -> known.valueIn(columns);
+        String typeLabel = column.apply(Column.TYPE).requiredText();
         return new FioTransaction(
                 column.apply(Column.MOVEMENT_ID).requiredLong(),
                 column.apply(Column.DATE).requiredDate(),
-                column.apply(Column.AMOUNT).requiredDecimal(),
-                column.apply(Column.CURRENCY).requiredText(),
-                column.apply(Column.COUNTERPARTY_ACCOUNT).optionalText(),
-                column.apply(Column.COUNTERPARTY_BANK_CODE).optionalText(),
-                column.apply(Column.COUNTERPARTY_BANK_NAME).optionalText(),
-                column.apply(Column.COUNTERPARTY_NAME).optionalText(),
-                column.apply(Column.CONSTANT_SYMBOL).optionalText(),
-                column.apply(Column.VARIABLE_SYMBOL).optionalText(),
-                column.apply(Column.SPECIFIC_SYMBOL).optionalText(),
+                new Money(column.apply(Column.AMOUNT).requiredDecimal(), column.apply(Column.CURRENCY).requiredCurrency()),
+                TransactionType.fromLabel(typeLabel),
+                typeLabel,
+                counterparty(column),
+                symbols(column),
                 column.apply(Column.USER_IDENTIFICATION).optionalText(),
-                column.apply(Column.TYPE).requiredText(),
                 column.apply(Column.EXECUTED_BY).optionalText(),
                 column.apply(Column.MESSAGE_FOR_RECIPIENT).optionalText(),
                 column.apply(Column.INSTRUCTION_ID).optionalLong(),
                 column.apply(Column.DETAIL).optionalText(),
                 column.apply(Column.COMMENT).optionalText(),
-                column.apply(Column.BIC).optionalText(),
                 column.apply(Column.PAYER_REFERENCE).optionalText(),
                 columns);
+    }
+
+    private static Counterparty counterparty(Function<Column, RawValue> column) {
+        return new Counterparty(
+                counterpartyAccount(
+                        column.apply(Column.COUNTERPARTY_ACCOUNT).optionalText(),
+                        column.apply(Column.COUNTERPARTY_BANK_CODE).optionalText()),
+                column.apply(Column.COUNTERPARTY_NAME).optionalText(),
+                column.apply(Column.COUNTERPARTY_BANK_NAME).optionalText(),
+                column.apply(Column.BIC).optionalText());
+    }
+
+    private static @Nullable BankAccount counterpartyAccount(@Nullable String account, @Nullable String bankCode) {
+        if (account == null) {
+            return null;
+        }
+        if (DOMESTIC_ACCOUNT.matcher(account).matches() && (bankCode == null || bankCode.matches("\\d{4}"))) {
+            return DomesticAccount.parse(bankCode == null ? account : account + "/" + bankCode);
+        }
+        return new ForeignAccount(account);
+    }
+
+    private static PaymentSymbols symbols(Function<Column, RawValue> column) {
+        String variable = column.apply(Column.VARIABLE_SYMBOL).optionalText();
+        String constant = column.apply(Column.CONSTANT_SYMBOL).optionalText();
+        String specific = column.apply(Column.SPECIFIC_SYMBOL).optionalText();
+        try {
+            return new PaymentSymbols(variable, constant, specific);
+        } catch (IllegalArgumentException e) {
+            throw new MalformedResponseException("The payment symbols are not digits", e);
+        }
     }
 
     private static Map<Integer, FioColumn> columns(JsonNode transaction) {
@@ -124,7 +174,7 @@ final class FioStatementParser {
         return columns;
     }
 
-    private static Integer columnId(String key, JsonNode column) {
+    private static @Nullable Integer columnId(String key, JsonNode column) {
         JsonNode id = column.get("id");
         if (id != null && id.isIntegralNumber() && id.canConvertToInt()) {
             return id.intValue();
@@ -133,7 +183,7 @@ final class FioStatementParser {
         return matcher.matches() ? Integer.valueOf(matcher.group(1)) : null;
     }
 
-    private static String textOf(JsonNode node) {
+    private static @Nullable String textOf(@Nullable JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }
@@ -182,16 +232,16 @@ final class FioStatementParser {
         }
     }
 
-    private record RawValue(String label, String text) {
+    private record RawValue(String label, @Nullable String text) {
 
-        String optionalText() {
+        @Nullable String optionalText() {
             return text == null || text.isBlank() ? null : text;
         }
 
         String requiredText() {
             String value = optionalText();
             if (value == null) {
-                throw new MalformedStatementException(label + " is missing");
+                throw new MalformedResponseException(label + " is missing");
             }
             return value;
         }
@@ -204,16 +254,25 @@ final class FioStatementParser {
             return converted(requiredText(), Long::valueOf, "a whole number");
         }
 
-        Long optionalLong() {
+        @Nullable Long optionalLong() {
             String value = optionalText();
             return value == null ? null : converted(value, Long::valueOf, "a whole number");
+        }
+
+        @Nullable Integer optionalInt() {
+            String value = optionalText();
+            return value == null ? null : converted(value, Integer::valueOf, "a whole number");
+        }
+
+        Currency requiredCurrency() {
+            return converted(requiredText(), Currency::getInstance, "an ISO 4217 currency code");
         }
 
         LocalDate requiredDate() {
             return converted(requiredText(), RawValue::toDate, "a date");
         }
 
-        LocalDate optionalDate() {
+        @Nullable LocalDate optionalDate() {
             String value = optionalText();
             return value == null ? null : converted(value, RawValue::toDate, "a date");
         }
@@ -232,8 +291,8 @@ final class FioStatementParser {
         private <T> T converted(String value, Function<String, T> conversion, String expected) {
             try {
                 return conversion.apply(value);
-            } catch (NumberFormatException | DateTimeException e) {
-                throw new MalformedStatementException(label + " is not " + expected + ": '" + value + "'", e);
+            } catch (IllegalArgumentException | DateTimeException e) {
+                throw new MalformedResponseException(label + " is not " + expected + ": '" + value + "'", e);
             }
         }
     }

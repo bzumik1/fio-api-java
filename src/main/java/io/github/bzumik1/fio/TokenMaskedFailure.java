@@ -1,5 +1,6 @@
 package io.github.bzumik1.fio;
 
+import java.io.Serial;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -7,6 +8,9 @@ import java.util.List;
 import java.util.Set;
 
 final class TokenMaskedFailure extends Exception {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private TokenMaskedFailure(String maskedDescription, StackTraceElement[] stackTrace) {
         super(maskedDescription);

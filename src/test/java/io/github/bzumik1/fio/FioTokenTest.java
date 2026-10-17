@@ -68,4 +68,19 @@ class FioTokenTest {
         assertThat(token).isEqualTo(FioToken.of(SECRET)).hasSameHashCodeAs(FioToken.of(SECRET));
         assertThat(token).isNotEqualTo(FioToken.of(SECRET + "x")).isNotEqualTo(SECRET).isNotEqualTo(null);
     }
+
+    @Test
+    void should_read_from_environment_when_asked_given_variable_with_token() {
+        assertThat(FioToken.fromEnvironment("FIO_TEST_TOKEN", name -> name.equals("FIO_TEST_TOKEN") ? SECRET + "\n" : null))
+                .isEqualTo(FioToken.of(SECRET));
+    }
+
+    @Test
+    void should_reject_naming_the_variable_when_read_from_environment_given_unset_variable() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> FioToken.fromEnvironment("FIO_TEST_TOKEN", name -> null))
+                .withMessageContaining("FIO_TEST_TOKEN");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> FioToken.fromEnvironment("FIO_TOKEN_THAT_IS_NOT_SET_" + System.nanoTime()));
+    }
 }

@@ -11,21 +11,34 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
 final class StubFioServer implements AutoCloseable {
 
+    static final String JSON = "application/json;charset=UTF-8";
+
     record RecordedRequest(String method, String path, String accept) {
     }
 
-    private record CannedResponse(int status, String body, Duration delay) {
+    record RecordedBody(String contentType, byte[] content) {
+
+        String text() {
+            return new String(content, StandardCharsets.UTF_8);
+        }
+    }
+
+    private record CannedResponse(int status, String contentType, byte[] body, Duration delay) {
     }
 
     private final HttpServer server;
     private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
-    private volatile CannedResponse response = new CannedResponse(200, "", Duration.ZERO);
+    private final List<RecordedBody> bodies = new CopyOnWriteArrayList<>();
+    private final Deque<CannedResponse> queue = new ArrayDeque<>();
+    private volatile CannedResponse fallback = new CannedResponse(200, JSON, new byte[0], Duration.ZERO);
 
     private StubFioServer(HttpServer server) {
         this.server = server;
@@ -49,15 +62,33 @@ final class StubFioServer implements AutoCloseable {
     }
 
     void respondWith(int status, String body) {
-        response = new CannedResponse(status, body, Duration.ZERO);
+        respondWith(status, JSON, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    void respondWith(int status, String contentType, byte[] body) {
+        fallback = new CannedResponse(status, contentType, body, Duration.ZERO);
     }
 
     void respondAfter(Duration delay, int status, String body) {
-        response = new CannedResponse(status, body, delay);
+        fallback = new CannedResponse(status, JSON, body.getBytes(StandardCharsets.UTF_8), delay);
+    }
+
+    void enqueue(int status, String body) {
+        enqueue(status, JSON, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    void enqueue(int status, String contentType, byte[] body) {
+        synchronized (queue) {
+            queue.add(new CannedResponse(status, contentType, body, Duration.ZERO));
+        }
     }
 
     List<RecordedRequest> requests() {
         return List.copyOf(requests);
+    }
+
+    List<RecordedBody> bodies() {
+        return List.copyOf(bodies);
     }
 
     @Override
@@ -70,13 +101,25 @@ final class StubFioServer implements AutoCloseable {
                 exchange.getRequestMethod(),
                 exchange.getRequestURI().getRawPath(),
                 exchange.getRequestHeaders().getFirst("Accept")));
-        CannedResponse canned = response;
+        byte[] requestBody = exchange.getRequestBody().readAllBytes();
+        if (requestBody.length > 0) {
+            bodies.add(new RecordedBody(exchange.getRequestHeaders().getFirst("Content-Type"), requestBody));
+        }
+        CannedResponse canned = next();
         pause(canned.delay());
-        byte[] body = canned.body().getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json;charset=UTF-8");
-        exchange.sendResponseHeaders(canned.status(), body.length == 0 ? -1 : body.length);
+        if (!canned.contentType().isEmpty()) {
+            exchange.getResponseHeaders().set("Content-Type", canned.contentType());
+        }
+        exchange.sendResponseHeaders(canned.status(), canned.body().length == 0 ? -1 : canned.body().length);
         try (OutputStream output = exchange.getResponseBody()) {
-            output.write(body);
+            output.write(canned.body());
+        }
+    }
+
+    private CannedResponse next() {
+        synchronized (queue) {
+            CannedResponse queued = queue.poll();
+            return queued == null ? fallback : queued;
         }
     }
 
