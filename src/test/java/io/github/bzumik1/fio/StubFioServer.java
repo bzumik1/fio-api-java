@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -34,7 +34,7 @@ final class StubFioServer implements AutoCloseable {
     static StubFioServer start() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-            server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            server.setExecutor(Executors.newCachedThreadPool());
             StubFioServer stub = new StubFioServer(server);
             server.createContext("/", stub::handle);
             server.start();
@@ -82,7 +82,7 @@ final class StubFioServer implements AutoCloseable {
 
     private static void pause(Duration delay) {
         try {
-            Thread.sleep(delay);
+            Thread.sleep(delay.toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

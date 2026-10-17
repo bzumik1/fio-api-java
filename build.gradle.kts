@@ -3,13 +3,13 @@ plugins {
 	jacoco
 }
 
-group = "cz.novanadeje"
+group = "io.github.bzumik1"
 version = "0.1.0-SNAPSHOT"
 description = "Java client for the Fio banka REST API"
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
+		languageVersion = JavaLanguageVersion.of(17)
 	}
 }
 

@@ -1,6 +1,6 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
-import cz.novanadeje.fio.StubFioServer.RecordedRequest;
+import io.github.bzumik1.fio.StubFioServer.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 
-import static cz.novanadeje.fio.Fixtures.PERIODS_STATEMENT;
+import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 public final class FioAuthorizationException extends FioException {
 

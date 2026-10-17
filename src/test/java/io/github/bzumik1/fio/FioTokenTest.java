@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;

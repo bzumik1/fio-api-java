@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

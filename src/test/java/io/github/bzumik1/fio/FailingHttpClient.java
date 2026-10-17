@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
@@ -25,11 +25,13 @@ final class FailingHttpClient extends HttpClient {
     @Override
     public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
             throws IOException, InterruptedException {
-        switch (failure) {
-            case IOException io -> throw io;
-            case InterruptedException interrupted -> throw interrupted;
-            default -> throw new IllegalStateException(failure);
+        if (failure instanceof IOException io) {
+            throw io;
         }
+        if (failure instanceof InterruptedException interrupted) {
+            throw interrupted;
+        }
+        throw new IllegalStateException(failure);
     }
 
     @Override

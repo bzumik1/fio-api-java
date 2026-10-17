@@ -1,4 +1,4 @@
-package cz.novanadeje.fio;
+package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -11,8 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static cz.novanadeje.fio.Fixtures.DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES;
-import static cz.novanadeje.fio.Fixtures.PERIODS_STATEMENT;
+import static io.github.bzumik1.fio.Fixtures.DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES;
+import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -46,7 +46,7 @@ class FioStatementParserTest {
 
     @Test
     void should_map_every_known_column_when_parsed_given_fully_filled_transaction() {
-        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().getFirst();
+        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
 
         assertThat(transaction)
                 .returns(1148734530L, FioTransaction::id)
@@ -118,7 +118,7 @@ class FioStatementParserTest {
 
     @Test
     void should_keep_unknown_column_when_parsed_given_column_the_model_does_not_know() {
-        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().getFirst();
+        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
 
         assertThat(transaction.columns()).containsEntry(30, new FioColumn(30, "Budoucí sloupec", "budoucí hodnota"));
     }
@@ -157,7 +157,7 @@ class FioStatementParserTest {
     void should_take_calendar_date_when_parsed_given_date_with_or_without_offset(String raw, LocalDate expected) {
         FioStatement statement = parser.parse(statementWith(MINIMAL_INFO, transaction(replacing(0, "\"" + raw + "\""))));
 
-        assertThat(statement.transactions().getFirst().date()).isEqualTo(expected);
+        assertThat(statement.transactions().get(0).date()).isEqualTo(expected);
     }
 
     @Test
@@ -272,7 +272,7 @@ class FioStatementParserTest {
         columns.add("\"other\":{\"name\":\"Cizí klíč\",\"value\":\"e\"}");
         columns.add("\"column34\":\"not an object\"");
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().getFirst();
+        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.columns())
                 .containsEntry(30, new FioColumn(30, "Bez id", "a"))
@@ -291,7 +291,7 @@ class FioStatementParserTest {
         columns.add("\"column42\":{\"id\":42,\"name\":\"Číslo\",\"value\":1.50}");
         columns.add("\"column43\":{\"id\":43,\"value\":\"bez názvu\"}");
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().getFirst();
+        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.columns())
                 .containsEntry(40, new FioColumn(40, "Pravda", "true"))

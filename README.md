@@ -4,7 +4,7 @@ A small Java client for the read side of the [Fio banka](https://www.fio.cz) RES
 documentation version 1.9 of 16 October 2025). It downloads account movements as JSON and maps them to typed,
 immutable records, and it moves the server-side bookmark ("zarážka") that marks the last downloaded movement.
 
-It is a standalone library: package `cz.novanadeje.fio`, no Spring, and no runtime dependency other than Jackson 3
+It is a standalone library for Java 17 and newer: package and module `io.github.bzumik1.fio`, no Spring, and no runtime dependency other than Jackson 3
 (`tools.jackson.core:jackson-databind`). HTTP goes through `java.net.http.HttpClient`. It started life inside the
 web application of [Nadační fond Nová naděje](https://github.com/bzumik1/nfnn), whose history it keeps.
 
@@ -126,7 +126,7 @@ starts, a negative id) throw `IllegalArgumentException` before any request is se
 
 `build` also fails when the tests leave any line or branch of the library uncovered (JaCoCo, 100 % required).
 The tests need no network and no Docker: the JSON mapping runs against fixtures built from the documentation's
-examples (`src/test/resources/cz/novanadeje/fio/`), and the HTTP behaviour against an in-process
+examples (`src/test/resources/io/github/bzumik1/fio/`), and the HTTP behaviour against an in-process
 `com.sun.net.httpserver.HttpServer`.
 
 ## Documentation
