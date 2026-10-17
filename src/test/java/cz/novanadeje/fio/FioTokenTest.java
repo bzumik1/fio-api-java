@@ -55,4 +55,17 @@ class FioTokenTest {
         assertThat(token.occursIn("nothing here")).isFalse();
         assertThat(token.occursIn(null)).isFalse();
     }
+
+    @Test
+    void should_leave_null_alone_when_masking_given_no_text() {
+        assertThat(FioToken.of(SECRET).mask(null)).isNull();
+    }
+
+    @Test
+    void should_compare_by_value_when_compared_given_other_tokens_and_objects() {
+        FioToken token = FioToken.of(SECRET);
+
+        assertThat(token).isEqualTo(FioToken.of(SECRET)).hasSameHashCodeAs(FioToken.of(SECRET));
+        assertThat(token).isNotEqualTo(FioToken.of(SECRET + "x")).isNotEqualTo(SECRET).isNotEqualTo(null);
+    }
 }

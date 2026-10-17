@@ -134,7 +134,7 @@ final class FioStatementParser {
     }
 
     private static String textOf(JsonNode node) {
-        if (node == null || node.isNull() || node.isMissingNode()) {
+        if (node == null || node.isNull()) {
             return null;
         }
         if (node.isString()) {

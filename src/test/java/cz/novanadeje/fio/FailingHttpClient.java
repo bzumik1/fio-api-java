@@ -16,15 +16,20 @@ import java.util.concurrent.Executor;
 
 final class FailingHttpClient extends HttpClient {
 
-    private final IOException failure;
+    private final Exception failure;
 
-    FailingHttpClient(IOException failure) {
+    FailingHttpClient(Exception failure) {
         this.failure = failure;
     }
 
     @Override
-    public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) throws IOException {
-        throw failure;
+    public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        switch (failure) {
+            case IOException io -> throw io;
+            case InterruptedException interrupted -> throw interrupted;
+            default -> throw new IllegalStateException(failure);
+        }
     }
 
     @Override

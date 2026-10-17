@@ -249,6 +249,57 @@ class FioStatementParserTest {
         assertThatThrownBy(() -> parser.parse(body)).isInstanceOf(MalformedStatementException.class);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            ",\"transactionList\":{\"transaction\":{}}",
+            ",\"transactionList\":{\"transaction\":\"none\"}",
+            ",\"transactionList\":{\"transaction\":[1]}",
+            ",\"transactionList\":{\"transaction\":[null]}"
+    })
+    void should_reject_when_parsed_given_transaction_list_of_wrong_shape(String transactionList) {
+        String json = "{\"accountStatement\":{\"info\":" + MINIMAL_INFO + transactionList + "}}";
+
+        assertThatThrownBy(() -> parser.parse(json)).isInstanceOf(MalformedStatementException.class);
+    }
+
+    @Test
+    void should_take_column_id_from_key_when_parsed_given_column_without_usable_id() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add("\"column30\":{\"name\":\"Bez id\",\"value\":\"a\"}");
+        columns.add("\"column31\":{\"id\":\"31\",\"name\":\"Textové id\",\"value\":\"b\"}");
+        columns.add("\"column32\":{\"id\":99999999999,\"name\":\"Příliš velké id\",\"value\":\"c\"}");
+        columns.add("\"column33\":{\"id\":3.5,\"name\":\"Desetinné id\",\"value\":\"d\"}");
+        columns.add("\"other\":{\"name\":\"Cizí klíč\",\"value\":\"e\"}");
+        columns.add("\"column34\":\"not an object\"");
+
+        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().getFirst();
+
+        assertThat(transaction.columns())
+                .containsEntry(30, new FioColumn(30, "Bez id", "a"))
+                .containsEntry(31, new FioColumn(31, "Textové id", "b"))
+                .containsEntry(32, new FioColumn(32, "Příliš velké id", "c"))
+                .containsEntry(33, new FioColumn(33, "Desetinné id", "d"))
+                .doesNotContainKeys(34)
+                .hasSize(mandatoryColumns().size() + 4);
+    }
+
+    @Test
+    void should_keep_raw_json_text_when_parsed_given_column_values_that_are_not_strings() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add("\"column40\":{\"id\":40,\"name\":\"Pravda\",\"value\":true}");
+        columns.add("\"column41\":{\"id\":41,\"name\":\"Objekt\",\"value\":{\"a\":1}}");
+        columns.add("\"column42\":{\"id\":42,\"name\":\"Číslo\",\"value\":1.50}");
+        columns.add("\"column43\":{\"id\":43,\"value\":\"bez názvu\"}");
+
+        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().getFirst();
+
+        assertThat(transaction.columns())
+                .containsEntry(40, new FioColumn(40, "Pravda", "true"))
+                .containsEntry(41, new FioColumn(41, "Objekt", "{\"a\":1}"))
+                .containsEntry(42, new FioColumn(42, "Číslo", "1.50"))
+                .containsEntry(43, new FioColumn(43, null, "bez názvu"));
+    }
+
     private static String statementWith(String info, String transaction) {
         String transactions = transaction == null ? "" : transaction;
         return "{\"accountStatement\":{\"info\":" + info + ",\"transactionList\":{\"transaction\":[" + transactions + "]}}}";

@@ -1,5 +1,6 @@
 plugins {
 	`java-library`
+	jacoco
 }
 
 group = "cz.novanadeje"
@@ -27,4 +28,33 @@ dependencies {
 
 tasks.test {
 	useJUnitPlatform()
+	finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+	dependsOn(tasks.test)
+	reports {
+		xml.required = true
+		html.required = true
+	}
+}
+
+tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.jacocoTestReport)
+	violationRules {
+		rule {
+			limit {
+				counter = "LINE"
+				minimum = "1.00".toBigDecimal()
+			}
+			limit {
+				counter = "BRANCH"
+				minimum = "1.00".toBigDecimal()
+			}
+		}
+	}
+}
+
+tasks.check {
+	dependsOn(tasks.jacocoTestCoverageVerification)
 }

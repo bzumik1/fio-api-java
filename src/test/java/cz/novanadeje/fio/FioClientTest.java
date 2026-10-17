@@ -268,6 +268,22 @@ class FioClientTest {
     }
 
     @Test
+    void should_raise_transport_failure_and_keep_interrupt_flag_when_downloading_given_interrupted_request() {
+        InterruptedException interruption = new InterruptedException("Shutting down " + SECRET);
+        FioClient failingClient = FioClient.builder(TOKEN).httpClient(new FailingHttpClient(interruption)).build();
+
+        try {
+            FioTransportException failure = catchThrowableOfType(FioTransportException.class, failingClient::newTransactions);
+
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            assertThat(failure).hasMessageContaining("was interrupted");
+            assertThat(printed(failure)).doesNotContain(SECRET).contains("InterruptedException");
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     void should_not_reveal_token_when_printed_given_client() {
         assertThat(client.toString()).doesNotContain(SECRET);
     }

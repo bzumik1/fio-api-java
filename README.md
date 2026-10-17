@@ -1,12 +1,12 @@
 # fio-api
 
-A small Java 25 client for the read side of the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictví",
+A small Java client for the read side of the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictví",
 documentation version 1.9 of 16 October 2025). It downloads account movements as JSON and maps them to typed,
 immutable records, and it moves the server-side bookmark ("zarážka") that marks the last downloaded movement.
 
 It is a standalone library: package `cz.novanadeje.fio`, no Spring, and no runtime dependency other than Jackson 3
-(`tools.jackson.core:jackson-databind`). HTTP goes through `java.net.http.HttpClient`. Nothing in it knows about the
-application it currently lives next to.
+(`tools.jackson.core:jackson-databind`). HTTP goes through `java.net.http.HttpClient`. It started life inside the
+web application of [Nadační fond Nová naděje](https://github.com/bzumik1/nfnn), whose history it keeps.
 
 ## Usage
 
@@ -119,24 +119,20 @@ starts, a negative id) throw `IllegalArgumentException` before any request is se
 
 ## Building and testing
 
-From `backend/`:
-
 ```
-./gradlew :fio-api:test
-./gradlew :fio-api:build
+./gradlew test
+./gradlew build
 ```
 
+`build` also fails when the tests leave any line or branch of the library uncovered (JaCoCo, 100 % required).
 The tests need no network and no Docker: the JSON mapping runs against fixtures built from the documentation's
 examples (`src/test/resources/cz/novanadeje/fio/`), and the HTTP behaviour against an in-process
 `com.sun.net.httpserver.HttpServer`.
 
-## Moving it into its own repository
+## Documentation
 
-Nothing in `fio-api` depends on the application, so it can move as it is:
+Fio's own documentation of the API, in the version this library follows, is in [`docs/`](docs/README.md).
 
-1. Copy `backend/fio-api/` into a new repository, add a Gradle wrapper and a `settings.gradle.kts` with
-   `rootProject.name = "fio-api"` (plus the foojay toolchain resolver plugin if the JDK should be downloaded).
-2. Add `maven-publish` to `build.gradle.kts` and publish it, for example to GitHub Packages.
-3. In the application, drop `include("fio-api")` from `settings.gradle.kts`, replace
-   `implementation(project(":fio-api"))` with the published coordinates `cz.novanadeje:fio-api:<version>`, and
-   remove the `COPY fio-api ./fio-api` line from `backend/Dockerfile`.
+## License
+
+[MIT](LICENSE).
