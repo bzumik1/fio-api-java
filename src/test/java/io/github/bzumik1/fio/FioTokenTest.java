@@ -76,6 +76,11 @@ class FioTokenTest {
     }
 
     @Test
+    void should_read_from_process_environment_when_asked_given_variable_set_by_the_build() {
+        assertThat(FioToken.fromEnvironment("FIO_API_TEST_TOKEN")).isEqualTo(FioToken.of("token-set-by-the-build-for-tests"));
+    }
+
+    @Test
     void should_reject_naming_the_variable_when_read_from_environment_given_unset_variable() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> FioToken.fromEnvironment("FIO_TEST_TOKEN", name -> null))

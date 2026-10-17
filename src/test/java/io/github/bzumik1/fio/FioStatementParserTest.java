@@ -353,6 +353,16 @@ class FioStatementParserTest {
     }
 
     @Test
+    void should_read_domestic_account_without_bank_code_when_parsed_given_counterparty_without_one() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add(column(2, "Protiúčet", "\"2400222222\""));
+
+        Counterparty counterparty = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0).counterparty();
+
+        assertThat(counterparty.account()).isEqualTo(new DomesticAccount(null, "2400222222", null));
+    }
+
+    @Test
     void should_read_foreign_account_when_parsed_given_counterparty_with_iban_or_odd_bank_code() {
         List<String> withIban = new ArrayList<>(mandatoryColumns());
         withIban.add(column(2, "Protiúčet", "\"AT611904300234573201\""));

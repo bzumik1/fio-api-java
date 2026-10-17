@@ -27,8 +27,13 @@ class ValueObjectsTest {
     void should_tell_when_empty_given_counterparty_and_symbols() {
         assertThat(Counterparty.none().isEmpty()).isTrue();
         assertThat(new Counterparty(null, "Novák", null, null).isEmpty()).isFalse();
+        assertThat(new Counterparty(DomesticAccount.parse("2400222222/2010"), null, null, null).isEmpty()).isFalse();
+        assertThat(new Counterparty(null, null, "Fio banka", null).isEmpty()).isFalse();
+        assertThat(new Counterparty(null, null, null, "FIOBCZPP").isEmpty()).isFalse();
         assertThat(PaymentSymbols.none().isEmpty()).isTrue();
         assertThat(PaymentSymbols.variable("0558").isEmpty()).isFalse();
+        assertThat(new PaymentSymbols(null, "0558", null).isEmpty()).isFalse();
+        assertThat(new PaymentSymbols(null, null, "1").isEmpty()).isFalse();
         assertThat(PaymentSymbols.variable("0558")).isEqualTo(new PaymentSymbols("0558", null, null));
     }
 
@@ -77,6 +82,7 @@ class ValueObjectsTest {
                 .isEqualTo(new FioDocument("text/plain", "ahoj".getBytes(StandardCharsets.UTF_8)))
                 .hasSameHashCodeAs(new FioDocument("text/plain", "ahoj".getBytes(StandardCharsets.UTF_8)))
                 .isNotEqualTo(new FioDocument("text/csv", "ahoj".getBytes(StandardCharsets.UTF_8)))
+                .isNotEqualTo(new FioDocument("text/plain", "ahoi".getBytes(StandardCharsets.UTF_8)))
                 .isNotEqualTo("ahoj");
     }
 

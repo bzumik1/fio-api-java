@@ -45,6 +45,7 @@ tasks.javadoc {
 
 tasks.test {
 	useJUnitPlatform()
+	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
 	finalizedBy(tasks.jacocoTestReport)
 }
 
