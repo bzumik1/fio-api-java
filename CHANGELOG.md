@@ -6,6 +6,8 @@ All notable changes to this library are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-18
+
 ### Added
 
 - A client of the whole Fio banka REST API (version of 16 October 2025): transactions for a period or since the
@@ -46,4 +48,5 @@ All notable changes to this library are recorded here. The format follows
 - Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations; the runtime dependencies are
   Jackson and the JSpecify annotations.
 
-[Unreleased]: https://github.com/bzumik1/fio-api-java/commits/main
+[Unreleased]: https://github.com/bzumik1/fio-api-java/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/bzumik1/fio-api-java/releases/tag/v1.0.0
