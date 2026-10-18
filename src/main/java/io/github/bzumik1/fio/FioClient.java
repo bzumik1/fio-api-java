@@ -280,8 +280,9 @@ public interface FioClient {
          * Submits a batch of payment orders built with this library.
          *
          * @param batch the orders
-         * @return the bank's answer to the batch
-         * @throws FioException when the bank refuses or does not answer the request
+         * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
+         *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
+         * @throws FioException when the bank does not answer, or refuses the request before checking the orders
          */
         ImportResult submit(PaymentBatch batch);
 
@@ -289,8 +290,9 @@ public interface FioClient {
          * Submits a file of payment orders in one of the formats Fio imports.
          *
          * @param file the file and its format
-         * @return the bank's answer to the batch
-         * @throws FioException when the bank refuses or does not answer the request
+         * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
+         *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
+         * @throws FioException when the bank does not answer, or refuses the request before checking the orders
          */
         ImportResult upload(PaymentFile file);
     }
@@ -335,8 +337,9 @@ public interface FioClient {
         /**
          * Submits the batch.
          *
-         * @return the bank's answer to the batch
-         * @throws FioException when the bank refuses or does not answer the request
+         * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
+         *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
+         * @throws FioException when the bank does not answer, or refuses the request before checking the orders
          * @throws IllegalStateException when the batch is empty
          */
         ImportResult submit();
