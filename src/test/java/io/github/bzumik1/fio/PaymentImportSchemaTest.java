@@ -6,17 +6,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.xml.sax.SAXException;
 
-import javax.xml.XMLConstants;
-import javax.xml.transform.stream.StreamSource;
-import javax.xml.validation.Schema;
-import javax.xml.validation.SchemaFactory;
-import javax.xml.validation.Validator;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
@@ -25,38 +18,13 @@ import static io.github.bzumik1.fio.PaymentSamples.foreign;
 import static io.github.bzumik1.fio.PaymentSamples.fullDomestic;
 import static io.github.bzumik1.fio.PaymentSamples.fullEuro;
 import static io.github.bzumik1.fio.PaymentSamples.fullForeign;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PaymentImportSchemaTest {
 
-    private static final Schema IMPORT = schema("importIB.xsd");
-    private static final Schema RESPONSE = schema("responseImportIB.xsd");
-
     private final PaymentImportWriter writer = new PaymentImportWriter();
-
-    private static Schema schema(String name) {
-        URL location = PaymentImportSchemaTest.class.getResource("/schema/" + name);
-        try {
-            SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-            factory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "file");
-            factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-            return factory.newSchema(location);
-        } catch (SAXException e) {
-            throw new IllegalStateException("The vendored schema " + name + " does not load", e);
-        }
-    }
-
-    private static void validate(Schema schema, byte[] xml) throws SAXException {
-        Validator validator = schema.newValidator();
-        validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-        validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        try {
-            validator.validate(new StreamSource(new ByteArrayInputStream(xml)));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
 
     static Stream<List<PaymentOrder>> batches() {
         String longest140 = "č".repeat(140);
@@ -93,7 +61,16 @@ class PaymentImportSchemaTest {
     void should_match_fio_import_schema_when_written_given_batch(List<PaymentOrder> orders) {
         byte[] xml = writer.write(orders);
 
-        assertThatCode(() -> validate(IMPORT, xml)).doesNotThrowAnyException();
+        assertThatCode(() -> ImportSchema.validate(ImportSchema.IMPORT, xml)).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            FixtureBytes.DOMESTIC_PAYMENT_EXAMPLE, FixtureBytes.EURO_PAYMENT_EXAMPLE, FixtureBytes.FOREIGN_PAYMENT_EXAMPLE})
+    void should_match_fio_import_schema_when_validated_given_payment_example_of_the_documentation(String example) {
+        byte[] xml = FixtureBytes.read(example);
+
+        assertThatCode(() -> ImportSchema.validate(ImportSchema.IMPORT, xml)).doesNotThrowAnyException();
     }
 
     @Test
@@ -102,7 +79,7 @@ class PaymentImportSchemaTest {
         String euro = new String(writer.write(List.of(euro())), StandardCharsets.UTF_8);
         String euroThenDomestic = euro.replace("</Orders>", between(domestic, "<Orders>", "</Orders>") + "</Orders>");
 
-        assertThatThrownBy(() -> validate(IMPORT, euroThenDomestic.getBytes(StandardCharsets.UTF_8)))
+        assertThatThrownBy(() -> ImportSchema.validate(ImportSchema.IMPORT, euroThenDomestic.getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(SAXException.class)
                 .hasMessageContaining("DomesticTransaction");
     }
@@ -110,9 +87,34 @@ class PaymentImportSchemaTest {
     @ParameterizedTest
     @ValueSource(strings = {Fixtures.IMPORT_ACCEPTED, Fixtures.IMPORT_REFUSED})
     void should_match_fio_response_schema_when_validated_given_response_fixture(String fixture) {
-        byte[] xml = Fixtures.read(fixture).getBytes(StandardCharsets.UTF_8);
+        byte[] xml = FixtureBytes.read(fixture);
 
-        assertThatCode(() -> validate(RESPONSE, xml)).doesNotThrowAnyException();
+        assertThatCode(() -> ImportSchema.validate(ImportSchema.RESPONSE, xml)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void should_use_exactly_the_schema_codes_when_listed_given_domestic_payment_types() {
+        assertThat(Stream.of(DomesticPayment.Type.values()).map(DomesticPayment.Type::code))
+                .containsExactlyElementsOf(ImportSchema.enumeration("payment_type_domestic_type"));
+    }
+
+    @Test
+    void should_use_exactly_the_schema_codes_when_listed_given_euro_payment_types() {
+        assertThat(Stream.of(EuroPayment.Type.values()).map(EuroPayment.Type::code))
+                .containsExactlyElementsOf(ImportSchema.enumeration("payment_type_t2_type"));
+    }
+
+    @Test
+    void should_use_exactly_the_schema_codes_when_listed_given_foreign_payment_charges() {
+        assertThat(Stream.of(ForeignPayment.Charges.values()).map(ForeignPayment.Charges::code))
+                .containsExactlyElementsOf(ImportSchema.enumeration("details_charges_type"));
+    }
+
+    @Test
+    void should_use_exactly_the_schema_statuses_when_listed_given_import_statuses() {
+        assertThat(Stream.of(ImportResult.Status.values()).map(status -> status.name().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet()))
+                .containsExactlyInAnyOrderElementsOf(ImportSchema.enumeration("status"));
     }
 
     private static String between(String text, String start, String end) {

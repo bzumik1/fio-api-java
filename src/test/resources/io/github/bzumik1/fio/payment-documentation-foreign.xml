@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Import xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:noNamespaceSchemaLocation="http://www.fio.cz/schema/importIB.xsd">
+<Orders>
+<ForeignTransaction>
+<accountFrom>1234562</accountFrom>
+<currency>USD</currency>
+<amount>100.00</amount>
+<accountTo>PK36SCBL0000001123456702</accountTo>
+<bic>ALFHPKKAXXX</bic>
+<date>2013-04-25</date>
+<comment>Payment a0315</comment>
+<benefName>Amir Khan</benefName>
+<benefStreet>Nishtar Rd 13</benefStreet>
+<benefCity>Karachi</benefCity>
+<benefCountry>PK</benefCountry>
+<remittanceInfo1>Payment for hotel 032013</remittanceInfo1>
+<remittanceInfo2></remittanceInfo2>
+<remittanceInfo3></remittanceInfo3>
+<remittanceInfo4></remittanceInfo4>
+<detailsOfCharges>470502</detailsOfCharges>
+<paymentReason>348</paymentReason>
+</ForeignTransaction>
+</Orders>
+</Import>

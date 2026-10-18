@@ -5,13 +5,13 @@ import io.github.bzumik1.fio.ImportResult.Status;
 import io.github.bzumik1.fio.ImportResult.Sum;
 import org.jspecify.annotations.Nullable;
 
+import javax.xml.XMLConstants;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
-import java.io.StringReader;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,12 +21,13 @@ import java.util.function.Function;
 final class ImportResponseParser {
 
     private static final String ROOT = "responseImport";
-
-    ImportResult parse(byte[] xml) {
-        return parse(new String(xml, StandardCharsets.UTF_8));
-    }
+    private static final int MAXIMUM_DEPTH = 16;
 
     ImportResult parse(String xml) {
+        return parse(xml.getBytes(StandardCharsets.UTF_8));
+    }
+
+    ImportResult parse(byte[] xml) {
         Element root = read(xml);
         if (!root.name().equals(ROOT)) {
             throw new MalformedResponseException("The body is a <" + root.name() + ">, not a <" + ROOT + ">");
@@ -45,8 +46,8 @@ final class ImportResponseParser {
         for (Element sum : sums.all("sum")) {
             parsed.add(new Sum(
                     sum.attribute("id"),
-                    optionalNumber(sum, "sumDebet", BigDecimal::new),
-                    optionalNumber(sum, "sumCredit", BigDecimal::new)));
+                    optionalNumber(sum, "sumDebet", RawValue::toDecimal),
+                    optionalNumber(sum, "sumCredit", RawValue::toDecimal)));
         }
         return parsed;
     }
@@ -89,21 +90,25 @@ final class ImportResponseParser {
         }
     }
 
-    private static Element read(String xml) {
-        XMLInputFactory factory = XMLInputFactory.newFactory();
+    private static Element read(byte[] xml) {
+        XMLInputFactory factory = XMLInputFactory.newDefaultFactory();
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
         factory.setProperty(XMLInputFactory.IS_COALESCING, true);
         try {
-            XMLStreamReader reader = factory.createXMLStreamReader(new StringReader(xml));
+            XMLStreamReader reader = factory.createXMLStreamReader(new ByteArrayInputStream(xml));
             reader.nextTag();
-            return element(reader);
+            return element(reader, 1);
         } catch (XMLStreamException e) {
             throw new MalformedResponseException("The body is not well-formed XML without a DTD", e);
         }
     }
 
-    private static Element element(XMLStreamReader reader) throws XMLStreamException {
+    private static Element element(XMLStreamReader reader, int depth) throws XMLStreamException {
+        if (depth > MAXIMUM_DEPTH) {
+            throw new MalformedResponseException("The body nests elements deeper than an import answer does");
+        }
         String name = reader.getLocalName();
         Map<String, String> attributes = new HashMap<>();
         for (int index = 0; index < reader.getAttributeCount(); index++) {
@@ -113,7 +118,7 @@ final class ImportResponseParser {
         List<Element> children = new ArrayList<>();
         for (int event = reader.next(); event != XMLStreamConstants.END_ELEMENT; event = reader.next()) {
             if (event == XMLStreamConstants.START_ELEMENT) {
-                children.add(element(reader));
+                children.add(element(reader, depth + 1));
             } else if (event == XMLStreamConstants.CHARACTERS) {
                 text.append(reader.getText());
             }

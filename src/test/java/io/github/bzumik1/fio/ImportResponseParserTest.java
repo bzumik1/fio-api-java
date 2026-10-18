@@ -5,11 +5,17 @@ import io.github.bzumik1.fio.ImportResult.Status;
 import io.github.bzumik1.fio.ImportResult.Sum;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.xml.stream.XMLStreamException;
 import java.math.BigDecimal;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -75,14 +81,13 @@ class ImportResponseParserTest {
                 </responseImport>
                 """);
 
-        assertThat(result.sums()).containsExactly(new Sum(null, null, null));
-        assertThat(result.messages()).containsExactly(new Message(null, null, "Bez čísla"));
-        assertThat(result.isAccepted()).isTrue();
+        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, null, List.of(new Sum(null, null, null)),
+                List.of(new Message(null, null, "Bez čísla"))));
     }
 
     @ParameterizedTest
     @CsvSource({"ok, OK", "warning, WARNING", "error, ERROR", "fatal, FATAL", "FATAL, FATAL", " ok , OK"})
-    void should_read_status_ignoring_case_and_padding_when_parsed(String text, Status status) {
+    void should_read_status_ignoring_case_and_padding_when_parsed_given_status_text(String text, Status status) {
         assertThat(parser.parse(response("<errorCode>0</errorCode><status>" + text + "</status>")).status())
                 .isEqualTo(status);
     }
@@ -150,17 +155,100 @@ class ImportResponseParserTest {
                 .hasMessage(problem);
     }
 
-    @Test
-    void should_refuse_without_reading_files_when_parsed_given_external_entity() {
-        String body = """
-                <?xml version="1.0"?>
-                <!DOCTYPE responseImport [<!ENTITY secret SYSTEM "file:///etc/passwd">]>
-                <responseImport><result><errorCode>0</errorCode><status>ok</status><message>&secret;</message>\
-                </result></responseImport>""";
+    @ParameterizedTest
+    @ValueSource(strings = {"file:///etc/passwd", "http://127.0.0.1:1/entity"})
+    void should_refuse_with_the_cause_when_parsed_given_internal_subset_with_external_entity(String entity) {
+        String body = "<?xml version=\"1.0\"?>\n<!DOCTYPE responseImport [<!ENTITY secret SYSTEM \"" + entity + "\">]>\n"
+                + "<responseImport><result><errorCode>0</errorCode><status>ok</status><message>&secret;</message>"
+                + "</result></responseImport>";
 
         assertThatThrownBy(() -> parser.parse(body))
-                .isInstanceOf(MalformedResponseException.class)
+                .isExactlyInstanceOf(MalformedResponseException.class)
                 .hasMessage("The body is not well-formed XML without a DTD")
                 .hasCauseInstanceOf(XMLStreamException.class);
+    }
+
+    @Test
+    void should_refuse_without_fetching_anything_when_parsed_given_document_type_and_entities_on_a_server() {
+        try (StubFioServer canary = StubFioServer.start()) {
+            String body = "<?xml version=\"1.0\"?><!DOCTYPE responseImport SYSTEM \"" + canary.baseUri() + "/schema.dtd\" ["
+                    + "<!ENTITY % parameter SYSTEM \"" + canary.baseUri() + "/parameter\"> %parameter;"
+                    + "<!ENTITY remote SYSTEM \"" + canary.baseUri() + "/entity\">]>"
+                    + "<responseImport><result><errorCode>0</errorCode><status>ok</status><message>&remote;</message>"
+                    + "</result></responseImport>";
+
+            assertThatThrownBy(() -> parser.parse(body))
+                    .isExactlyInstanceOf(MalformedResponseException.class)
+                    .hasMessage("The body is not well-formed XML without a DTD");
+            assertThat(canary.requests()).isEmpty();
+        }
+    }
+
+    @Test
+    void should_reject_without_exhausting_the_stack_when_parsed_given_two_hundred_thousand_nested_elements() {
+        String body = "<responseImport>" + "<x>".repeat(200_000) + "</x>".repeat(200_000) + "</responseImport>";
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body nests elements deeper than an import answer does");
+    }
+
+    @Test
+    void should_read_answer_when_parsed_given_nesting_up_to_the_limit() {
+        String nested = "<x>".repeat(13) + "</x>".repeat(13);
+
+        assertThat(parser.parse(response("<errorCode>0</errorCode><status>ok</status>" + nested)).status()).isEqualTo(Status.OK);
+    }
+
+    @Test
+    void should_reject_when_parsed_given_nesting_one_level_beyond_the_limit() {
+        String nested = "<x>".repeat(15) + "</x>".repeat(15);
+
+        assertThatThrownBy(() -> parser.parse(response("<errorCode>0</errorCode><status>ok</status>" + nested)))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body nests elements deeper than an import answer does");
+    }
+
+    static Stream<Arguments> encodedRefusals() {
+        String body = Fixtures.read(Fixtures.IMPORT_REFUSED);
+        String windows1250 = body.replace("encoding=\"UTF-8\"", "encoding=\"windows-1250\"");
+        byte[] utf8 = body.getBytes(StandardCharsets.UTF_8);
+        byte[] marked = new byte[utf8.length + 3];
+        marked[0] = (byte) 0xEF;
+        marked[1] = (byte) 0xBB;
+        marked[2] = (byte) 0xBF;
+        System.arraycopy(utf8, 0, marked, 3, utf8.length);
+        return Stream.of(
+                Arguments.of("windows-1250 declared", windows1250.getBytes(Charset.forName("windows-1250"))),
+                Arguments.of("UTF-8 with a byte order mark", marked),
+                Arguments.of("UTF-16 declared with a byte order mark",
+                        body.replace("encoding=\"UTF-8\"", "encoding=\"UTF-16\"").getBytes(StandardCharsets.UTF_16)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("encodedRefusals")
+    void should_read_czech_messages_when_parsed_given_body_in_the_encoding_its_declaration_or_mark_names(String encoding, byte[] body) {
+        assertThat(parser.parse(body).messages()).extracting(Message::text).containsExactly(
+                "Nalezené chyby při kontrole příkazů", "OK", "Neplatný kód banky příjemce.", "Měna platby neodpovídá měně účtu.");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"+1.50, 1.50", ".5, 0.5", "12., 12"})
+    void should_read_sum_when_parsed_given_decimal_in_any_form_the_schema_allows(String text, BigDecimal expected) {
+        ImportResult result = parser.parse(response(
+                "<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumDebet>" + text + "</sumDebet></sum></sums>"));
+
+        assertThat(result.sums()).containsExactly(new Sum("CZK", expected, null));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1e3", "1E999999999", "NaN", "0x1"})
+    void should_reject_naming_the_sum_when_parsed_given_sum_that_is_not_a_plain_decimal(String text) {
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumCredit>" + text
+                + "</sumCredit></sum></sums>");
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The sumCredit is not a number: '" + text + "'");
     }
 }

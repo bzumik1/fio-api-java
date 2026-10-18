@@ -24,9 +24,10 @@ class DomesticAccountTest {
             String text, String prefix, String number, String bankCode, String printed) {
         DomesticAccount account = DomesticAccount.parse(text);
 
-        assertThat(account).isEqualTo(new DomesticAccount(prefix, number, bankCode));
-        assertThat(account.toString()).isEqualTo(printed);
-        assertThat(account.numberWithPrefix()).isEqualTo(printed.split("/")[0]);
+        assertThat(account)
+                .isEqualTo(new DomesticAccount(prefix, number, bankCode))
+                .hasToString(printed)
+                .returns(printed.split("/")[0], DomesticAccount::numberWithPrefix);
     }
 
     @ParameterizedTest
@@ -35,12 +36,30 @@ class DomesticAccountTest {
         assertThatIllegalArgumentException().isThrownBy(() -> DomesticAccount.parse(text)).withMessageContaining(text);
     }
 
-    @Test
-    void should_reject_when_created_given_component_of_wrong_shape() {
-        assertThatIllegalArgumentException().isThrownBy(() -> new DomesticAccount("1234567", "1", "0800"));
-        assertThatIllegalArgumentException().isThrownBy(() -> new DomesticAccount(null, "12345678901", "0800"));
-        assertThatIllegalArgumentException().isThrownBy(() -> new DomesticAccount(null, "1", "80"));
-        assertThatIllegalArgumentException().isThrownBy(() -> new DomesticAccount("1a", "1", "0800"));
+    @ParameterizedTest
+    @CsvSource(value = {
+            "1234567 | 1           | 0800 | An account prefix is up to 6 digits: '1234567'",
+            "1a      | 1           | 0800 | An account prefix is up to 6 digits: '1a'",
+            "        | 12345678901 | 0800 | An account number is up to 10 digits: '12345678901'",
+            "        | 1           | 80   | A bank code is 4 digits: '80'"
+    }, delimiter = '|')
+    void should_reject_naming_the_part_when_created_given_component_of_wrong_shape(
+            String prefix, String number, String bankCode, String message) {
+        assertThatIllegalArgumentException().isThrownBy(() -> new DomesticAccount(prefix, number, bankCode)).withMessage(message);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"19-2000145399/0800", "2000145399", "0/0100", "19/0100", "1234567899/0100", "9999999999/0300",
+            "107000000/0100", "100001-19/0300", "35-1234562/0100", "000019-2000145399/0800"})
+    void should_pass_when_checksum_checked_given_prefix_and_number_divisible_by_eleven(String account) {
+        assertThat(DomesticAccount.parse(account).hasValidChecksum()).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"18-2000145399/0800", "2212-2000000699/0300", "2000145398/0800", "19-2000145398/0800", "1/0800",
+            "2400222222/2010", "100000-19/0300"})
+    void should_fail_when_checksum_checked_given_prefix_or_number_not_divisible_by_eleven(String account) {
+        assertThat(DomesticAccount.parse(account).hasValidChecksum()).isFalse();
     }
 
     @ParameterizedTest

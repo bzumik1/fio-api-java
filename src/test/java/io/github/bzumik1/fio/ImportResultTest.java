@@ -32,16 +32,36 @@ class ImportResultTest {
         sums.clear();
         messages.clear();
 
-        assertThat(result.sums()).containsExactly(new Sum("CZK", BigDecimal.TEN, null));
-        assertThat(result.messages()).containsExactly(new Message(1, Status.OK, "OK"));
+        assertThat(result)
+                .returns(List.of(new Sum("CZK", BigDecimal.TEN, null)), ImportResult::sums)
+                .returns(List.of(new Message(1, Status.OK, "OK")), ImportResult::messages);
+    }
+
+    @Test
+    void should_refuse_changes_when_messages_changed_given_created_result() {
+        ImportResult result = new ImportResult(0, Status.OK, 42L, List.of(), List.of(new Message(1, Status.OK, "OK")));
+
         assertThatThrownBy(() -> result.messages().add(new Message(null, null, "x")))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void should_reject_when_created_given_missing_status_or_message_text() {
+    void should_reject_when_created_given_missing_status() {
         assertThatNullPointerException().isThrownBy(() -> new ImportResult(0, null, null, List.of(), List.of()))
                 .withMessage("status");
+    }
+
+    @Test
+    void should_reject_when_created_given_message_without_text() {
         assertThatNullPointerException().isThrownBy(() -> new Message(1, Status.OK, null)).withMessage("text");
+    }
+
+    @Test
+    void should_equal_by_value_when_compared_given_same_parts() {
+        ImportResult result = new ImportResult(2, Status.WARNING, 7L, List.of(new Sum("EUR", null, BigDecimal.ONE)),
+                List.of(new Message(null, Status.WARNING, "Pozor")));
+
+        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, 7L, List.of(new Sum("EUR", null, BigDecimal.ONE)),
+                List.of(new Message(null, Status.WARNING, "Pozor"))));
     }
 }

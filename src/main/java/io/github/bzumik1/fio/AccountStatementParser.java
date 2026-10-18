@@ -6,11 +6,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.cfg.JsonNodeFeature;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
 import java.util.Map;
-import java.nio.charset.StandardCharsets;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -20,6 +21,7 @@ final class AccountStatementParser {
 
     private static final Pattern COLUMN_KEY = Pattern.compile("column(\\d{1,9})");
     private static final Pattern DOMESTIC_ACCOUNT = Pattern.compile("(?:\\d{1,6}-)?\\d{1,10}");
+    private static final int MAXIMUM_SCALE = 1000;
 
     private final JsonMapper mapper = JsonMapper.builder()
             .enable(JsonNodeFeature.USE_BIG_DECIMAL_FOR_FLOATS)
@@ -192,9 +194,16 @@ final class AccountStatementParser {
             return node.stringValue();
         }
         if (node.isNumber()) {
-            return node.decimalValue().toPlainString();
+            return plain(node.decimalValue());
         }
         return node.toString();
+    }
+
+    private static String plain(BigDecimal number) {
+        if (number.scale() > MAXIMUM_SCALE || number.scale() < -MAXIMUM_SCALE) {
+            throw new MalformedResponseException("The body holds a number with an exponent no statement needs: " + number);
+        }
+        return number.toPlainString();
     }
 
     private enum Column {

@@ -5,10 +5,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.Currency;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import static io.github.bzumik1.fio.Fixtures.DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES;
@@ -16,6 +19,7 @@ import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 class AccountStatementParserTest {
 
@@ -72,22 +76,27 @@ class AccountStatementParserTest {
     void should_keep_minus_sign_and_scale_when_parsed_given_outgoing_and_small_amounts() {
         List<Transaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
 
-        assertThat(transactions).extracting(Transaction::amount)
-                .containsExactly(Money.czk("1.00"), Money.czk("-1.00"), Money.czk("0.01"));
-        assertThat(transactions.get(1).isOutgoing()).isTrue();
+        assertThat(transactions).extracting(transaction -> transaction.amount().amount().toPlainString())
+                .containsExactly("1.00", "-1.00", "0.01");
     }
 
     @Test
-    void should_leave_optional_fields_null_when_parsed_given_null_or_blank_columns() {
-        List<Transaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
-        Transaction outgoing = transactions.get(1);
-        Transaction interest = transactions.get(2);
+    void should_leave_optional_fields_null_when_parsed_given_outgoing_payment_with_null_or_blank_columns() {
+        Transaction outgoing = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(1);
 
-        assertThat(outgoing.counterparty().name()).isNull();
-        assertThat(outgoing.counterparty().bic()).isNull();
-        assertThat(outgoing.symbols()).isEqualTo(new PaymentSymbols(null, "0558", null));
-        assertThat(outgoing.userIdentification()).isNull();
-        assertThat(outgoing.comment()).isNull();
+        assertThat(outgoing)
+                .returns(new Counterparty(DomesticAccount.parse("2900233333/2010"), null, "Fio banka, a.s.", null),
+                        Transaction::counterparty)
+                .returns(new PaymentSymbols(null, "0558", null), Transaction::symbols)
+                .returns(null, Transaction::userIdentification)
+                .returns(null, Transaction::comment)
+                .returns(true, Transaction::isOutgoing);
+    }
+
+    @Test
+    void should_have_no_counterparty_or_symbols_when_parsed_given_credited_interest() {
+        Transaction interest = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(2);
+
         assertThat(interest)
                 .returns(Counterparty.none(), Transaction::counterparty)
                 .returns(PaymentSymbols.none(), Transaction::symbols)
@@ -127,6 +136,122 @@ class AccountStatementParserTest {
         assertThat(statement.info().dateEnd()).isEqualTo(LocalDate.of(2012, 6, 30));
         assertThat(statement.transactions()).extracting(Transaction::date)
                 .containsExactly(LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 30));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "1325372400000, 2012-01-01",
+            "1340661600000, 2012-06-26",
+            "1332630000000, 2012-03-25",
+            "1332712800000, 2012-03-26",
+            "1351375200000, 2012-10-28",
+            "1351465200000, 2012-10-29"
+    })
+    void should_read_prague_calendar_day_when_parsed_given_epoch_midnight_in_winter_summer_or_on_a_clock_change_day(
+            long epochMilliseconds, LocalDate expected) {
+        AccountStatement statement = parser.parse(statementWith(MINIMAL_INFO, transaction(replacing(0, Long.toString(epochMilliseconds)))));
+
+        assertThat(statement.transactions().get(0).date()).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC", "America/Los_Angeles"})
+    void should_read_the_same_days_when_parsed_given_another_default_time_zone(String defaultZone) {
+        TimeZone original = TimeZone.getDefault();
+        AccountStatement statement;
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(defaultZone));
+            statement = parser.parse(Fixtures.read(DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES));
+        } finally {
+            TimeZone.setDefault(original);
+        }
+
+        assertSoftly(softly -> {
+            softly.assertThat(statement.info())
+                    .returns(LocalDate.of(2012, 6, 26), AccountInfo::dateStart)
+                    .returns(LocalDate.of(2012, 6, 30), AccountInfo::dateEnd);
+            softly.assertThat(statement.transactions()).extracting(Transaction::date)
+                    .containsExactly(LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 30));
+        });
+    }
+
+    @Test
+    void should_print_statement_as_2012_slash_3_when_parsed_given_documentation_answer_for_third_statement_of_2012() {
+        AccountStatement statement = parser.parse(FixtureBytes.read(FixtureBytes.STATEMENT_2012_3));
+
+        assertThat(statement.info().statement()).hasToString("2012/3");
+    }
+
+    @Test
+    void should_read_statement_number_period_and_movement_when_parsed_given_documentation_answer_for_third_statement_of_2012() {
+        AccountStatement statement = parser.parse(FixtureBytes.read(FixtureBytes.STATEMENT_2012_3));
+
+        assertThat(statement.info()).isEqualTo(new AccountInfo(
+                DomesticAccount.parse("2400222222/2010"),
+                "CZ7920100000002400222222",
+                "FIOBCZPPXXX",
+                Currency.getInstance("CZK"),
+                Money.czk("185.03"),
+                Money.czk("185.05"),
+                LocalDate.of(2012, 8, 1),
+                LocalDate.of(2012, 8, 31),
+                new StatementId(2012, 3),
+                1155172472L,
+                1155172472L,
+                null));
+        assertThat(statement.transactions())
+                .extracting(Transaction::id, Transaction::date, Transaction::amount, Transaction::type, Transaction::instructionId)
+                .containsExactly(tuple(1155172472L, LocalDate.of(2012, 8, 31), Money.czk("0.02"),
+                        TransactionType.INTEREST_CREDITED, 2135081594L));
+    }
+
+    @Test
+    void should_read_body_when_parsed_given_utf8_byte_order_mark_before_json() {
+        byte[] json = Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8);
+        byte[] withMark = new byte[json.length + 3];
+        withMark[0] = (byte) 0xEF;
+        withMark[1] = (byte) 0xBB;
+        withMark[2] = (byte) 0xBF;
+        System.arraycopy(json, 0, withMark, 3, json.length);
+
+        assertThat(parser.parse(withMark)).isEqualTo(parser.parse(json));
+    }
+
+    @Test
+    void should_read_czech_text_when_parsed_given_utf8_bytes() {
+        Transaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8)).transactions().get(0);
+
+        assertThat(transaction.executedBy()).isEqualTo("Béďa Trávníček");
+    }
+
+    @Test
+    void should_reject_when_parsed_given_json_nested_deeper_than_the_parser_allows() {
+        String nested = "[".repeat(200_000) + "]".repeat(200_000);
+
+        assertThatThrownBy(() -> parser.parse("{\"accountStatement\":" + nested + "}"))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body is not valid JSON");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1e999999999", "1E-999999999", "1e1001", "1e-1001"})
+    void should_reject_without_expanding_it_when_parsed_given_number_with_huge_exponent(String number) {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, number)));
+
+        assertThatThrownBy(() -> parser.parse(json))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessageStartingWith("The body holds a number with an exponent no statement needs");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1e1000", "1e-1000", "12.5e2"})
+    void should_write_number_out_when_parsed_given_exponent_within_limit(String number) {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add(column(42, "Číslo", number));
+
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+
+        assertThat(transaction.columns().get(42).value()).isEqualTo(new BigDecimal(number).toPlainString());
     }
 
     @Test
@@ -363,33 +488,45 @@ class AccountStatementParserTest {
     }
 
     @Test
-    void should_read_foreign_account_when_parsed_given_counterparty_with_iban_or_odd_bank_code() {
-        List<String> withIban = new ArrayList<>(mandatoryColumns());
-        withIban.add(column(2, "Protiúčet", "\"AT611904300234573201\""));
-        withIban.add(column(26, "BIC", "\"ABAGATWWXXX\""));
-        List<String> withOddBankCode = new ArrayList<>(mandatoryColumns());
-        withOddBankCode.add(column(2, "Protiúčet", "\"12345\""));
-        withOddBankCode.add(column(3, "Kód banky", "\"ABCDE\""));
+    void should_read_foreign_account_and_bic_when_parsed_given_counterparty_with_iban() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add(column(2, "Protiúčet", "\"AT611904300234573201\""));
+        columns.add(column(26, "BIC", "\"ABAGATWWXXX\""));
 
-        Counterparty foreign = parser.parse(statementWith(MINIMAL_INFO, transaction(withIban))).transactions().get(0).counterparty();
-        Counterparty odd = parser.parse(statementWith(MINIMAL_INFO, transaction(withOddBankCode))).transactions().get(0).counterparty();
+        Counterparty counterparty = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0).counterparty();
 
-        assertThat(foreign.account()).isEqualTo(new ForeignAccount("AT611904300234573201"));
-        assertThat(foreign.bic()).isEqualTo("ABAGATWWXXX");
-        assertThat(odd.account()).isEqualTo(new ForeignAccount("12345"));
+        assertThat(counterparty).isEqualTo(new Counterparty(new ForeignAccount("AT611904300234573201"), null, null, "ABAGATWWXXX"));
     }
 
     @Test
-    void should_keep_zero_symbol_and_map_unknown_type_when_parsed_given_real_world_values() {
+    void should_read_foreign_account_when_parsed_given_counterparty_with_bank_code_that_is_not_four_digits() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
+        columns.add(column(2, "Protiúčet", "\"12345\""));
+        columns.add(column(3, "Kód banky", "\"ABCDE\""));
+
+        Counterparty counterparty = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0).counterparty();
+
+        assertThat(counterparty.account()).isEqualTo(new ForeignAccount("12345"));
+    }
+
+    @Test
+    void should_keep_zero_variable_symbol_when_parsed_given_symbol_left_at_zero() {
         List<String> columns = new ArrayList<>(mandatoryColumns());
         columns.add(column(5, "VS", "\"0\""));
+
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+
+        assertThat(transaction.symbols()).isEqualTo(PaymentSymbols.ofVariable("0"));
+    }
+
+    @Test
+    void should_map_to_other_keeping_the_label_when_parsed_given_type_this_library_does_not_know() {
+        List<String> columns = new ArrayList<>(mandatoryColumns());
         columns.set(4, column(8, "Typ", "\"Něco nového\""));
 
         Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
-        assertThat(transaction.symbols().variable()).isEqualTo("0");
-        assertThat(transaction.type()).isEqualTo(TransactionType.OTHER);
-        assertThat(transaction.typeLabel()).isEqualTo("Něco nového");
+        assertThat(transaction).returns(TransactionType.OTHER, Transaction::type).returns("Něco nového", Transaction::typeLabel);
     }
 
     private static String statementWith(String info, String transaction) {

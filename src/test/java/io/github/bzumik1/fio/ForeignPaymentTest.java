@@ -2,21 +2,28 @@ package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Currency;
 import java.util.List;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.PaymentSamples.DUE;
 import static io.github.bzumik1.fio.PaymentSamples.foreignBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class ForeignPaymentTest {
 
     private static final Beneficiary AMIR = new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK");
+    private static final String ACCOUNT_OF_34_CHARACTERS = "AB12" + "3".repeat(30);
 
     @Test
     void should_carry_every_part_when_built_given_full_order() {
@@ -35,24 +42,29 @@ class ForeignPaymentTest {
 
     @Test
     void should_default_to_shared_charges_without_comment_when_built_given_required_parts_only() {
-        ForeignPayment payment = PaymentSamples.foreign();
-
-        assertThat(payment.charges()).isEqualTo(ForeignPayment.Charges.SHARED);
-        assertThat(payment.comment()).isNull();
-        assertThat(payment.remittanceInfo()).containsExactly("Payment for hotel 032013");
+        assertThat(PaymentSamples.foreign())
+                .returns(ForeignPayment.Charges.SHARED, ForeignPayment::charges)
+                .returns(null, ForeignPayment::comment)
+                .returns(List.of("Payment for hotel 032013"), ForeignPayment::remittanceInfo);
     }
 
     @Test
     void should_drop_spaces_before_measuring_when_built_given_account_written_in_groups() {
-        String account = "AB12" + "3".repeat(30);
-        String grouped = account.replaceAll("(.{4})", "$1 ");
+        String grouped = ACCOUNT_OF_34_CHARACTERS.replaceAll("(.{4})", "$1 ");
 
         ForeignPayment payment = foreignBuilder().from(DomesticAccount.of("2400222222", "2010")).to(grouped).build();
 
-        assertThat(grouped).hasSizeGreaterThan(34);
-        assertThat(payment.to()).isEqualTo(new ForeignAccount(account));
-        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().to(account + "4").build())
+        assertThat(payment.to()).isEqualTo(new ForeignAccount(ACCOUNT_OF_34_CHARACTERS));
+    }
+
+    @Test
+    void should_reject_when_built_given_account_longer_than_34_characters() {
+        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().to(ACCOUNT_OF_34_CHARACTERS + "4").build())
                 .withMessage("The recipient's account is at most 34 characters, not 35");
+    }
+
+    @Test
+    void should_reject_when_built_given_blank_account() {
         assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().to("   ").build())
                 .withMessage("A foreign account needs an identifier");
     }
@@ -63,29 +75,33 @@ class ForeignPaymentTest {
         assertThat(charges.code()).isEqualTo(code);
     }
 
+    private static ForeignPayment.Builder started() {
+        return ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA");
+    }
+
+    static Stream<Arguments> incompleteOrders() {
+        return Stream.of(
+                Arguments.of("payer's account", (Supplier<ForeignPayment>) () -> ForeignPayment.builder().build()),
+                Arguments.of("recipient's account", (Supplier<ForeignPayment>) () -> ForeignPayment.builder().from("1234562").build()),
+                Arguments.of("BIC", (Supplier<ForeignPayment>) () -> ForeignPayment.builder().from("1234562").to("PK36").build()),
+                Arguments.of("amount", (Supplier<ForeignPayment>) () -> started().build()),
+                Arguments.of("date", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).build()),
+                Arguments.of("beneficiary", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).date(DUE).build()),
+                Arguments.of("payment reason", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).date(DUE)
+                        .beneficiary(AMIR).remittanceInfo("x").build()));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("incompleteOrders")
+    void should_name_missing_part_when_built_given_incomplete_order(String part, Supplier<ForeignPayment> build) {
+        assertThatIllegalStateException().isThrownBy(build::get).withMessage("The " + part + " is required");
+    }
+
     @Test
-    void should_name_missing_part_when_built_given_incomplete_order() {
-        assertThatIllegalStateException().isThrownBy(() -> ForeignPayment.builder().build())
-                .withMessage("The payer's account is required");
-        assertThatIllegalStateException().isThrownBy(() -> ForeignPayment.builder().from("1234562").build())
-                .withMessage("The recipient's account is required");
-        assertThatIllegalStateException().isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").build())
-                .withMessage("The BIC is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA").build())
-                .withMessage("The amount is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA")
-                        .amount(Money.czk("1")).build())
-                .withMessage("The date is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA")
-                        .amount(Money.czk("1")).date(DUE).build())
-                .withMessage("The beneficiary is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA")
-                        .amount(Money.czk("1")).date(DUE).beneficiary(AMIR).remittanceInfo("x").build())
-                .withMessage("The payment reason is required");
+    void should_reject_when_created_given_no_payment_reason() {
+        assertThatNullPointerException().isThrownBy(() -> new ForeignPayment(DomesticAccount.parse("1234562"),
+                new ForeignAccount("PK36SCBL0000001123456702"), "ALFHPKKA", Money.czk("1"), DUE, null, AMIR, List.of("x"),
+                ForeignPayment.Charges.SHARED, null)).withMessage("paymentReason");
     }
 
     @Test
@@ -96,11 +112,14 @@ class ForeignPaymentTest {
     }
 
     @Test
-    void should_need_one_to_four_remittance_lines_when_built() {
+    void should_reject_when_built_given_no_remittance_line() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> ForeignPayment.builder().from("1234562").to("PK36").bic("ALFHPKKA")
-                        .amount(Money.czk("1")).date(DUE).beneficiary(AMIR).paymentReason("348").build())
+                .isThrownBy(() -> started().amount(Money.czk("1")).date(DUE).beneficiary(AMIR).paymentReason("348").build())
                 .withMessage("A payment outside SEPA needs at least one remittance line");
+    }
+
+    @Test
+    void should_reject_when_built_given_fifth_remittance_line() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> foreignBuilder().remittanceInfo("2").remittanceInfo("3").remittanceInfo("4")
                         .remittanceInfo("5").build())
@@ -108,13 +127,38 @@ class ForeignPaymentTest {
     }
 
     @Test
-    void should_reject_when_built_given_invalid_bic_amount_comment_or_payment_reason() {
+    void should_reject_when_built_given_malformed_bic() {
         assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().bic("12345678").build())
                 .withMessage("Not a BIC: '12345678'");
-        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().amount(Money.czk("-5")).build());
-        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().comment("x".repeat(141)).build());
+    }
+
+    @Test
+    void should_reject_when_built_given_negative_amount() {
+        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().amount(Money.czk("-5")).build())
+                .withMessage("A payment amount is positive: -5 CZK");
+    }
+
+    @Test
+    void should_reject_when_built_given_comment_longer_than_fio_imports() {
+        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().comment("x".repeat(141)).build())
+                .withMessage("The comment is at most 140 characters, not 141");
+    }
+
+    @Test
+    void should_reject_when_built_given_payment_reason_outside_fio_list() {
         assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().paymentReason("34").build())
-                .withMessage("The payment reason is 3 digits: '34'");
-        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().from("2400222222/0100").build());
+                .withMessage("Not a payment reason code Fio imports: '34'");
+    }
+
+    @Test
+    void should_reject_when_built_given_payer_outside_fio() {
+        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().from("2400222222/0100").build())
+                .withMessage("The payer's account is a Fio account with bank code 2010: 2400222222/0100");
+    }
+
+    @Test
+    void should_reject_when_built_given_due_date_with_five_digit_year() {
+        assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().date(LocalDate.MAX).build())
+                .withMessage("A due date has a four-digit year: " + LocalDate.MAX);
     }
 }
