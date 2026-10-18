@@ -1,19 +1,19 @@
 plugins {
 	`java-library`
 	jacoco
+	id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.bzumik1"
-version = "1.0.0-SNAPSHOT"
 description = "Java client for the Fio banka REST API"
 
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(17)
 	}
-	withSourcesJar()
-	withJavadocJar()
 }
+
+val testJdk = providers.gradleProperty("testJdk").map(JavaLanguageVersion::of).orElse(JavaLanguageVersion.of(17))
 
 repositories {
 	mavenCentral()
@@ -45,6 +45,9 @@ tasks.javadoc {
 
 tasks.test {
 	useJUnitPlatform()
+	javaLauncher = javaToolchains.launcherFor {
+		languageVersion = testJdk
+	}
 	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
 	finalizedBy(tasks.jacocoTestReport)
 }
@@ -75,4 +78,34 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
 	dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+mavenPublishing {
+	publishToMavenCentral(automaticRelease = true)
+	signAllPublications()
+	coordinates(group.toString(), "fio-api", version.toString())
+	pom {
+		name = "fio-api"
+		description = project.description
+		url = "https://github.com/bzumik1/fio-api-java"
+		inceptionYear = "2026"
+		licenses {
+			license {
+				name = "MIT License"
+				url = "https://opensource.org/license/mit"
+			}
+		}
+		developers {
+			developer {
+				id = "bzumik1"
+				name = "Jakub Znamenáček"
+				url = "https://github.com/bzumik1"
+			}
+		}
+		scm {
+			url = "https://github.com/bzumik1/fio-api-java"
+			connection = "scm:git:https://github.com/bzumik1/fio-api-java.git"
+			developerConnection = "scm:git:ssh://git@github.com/bzumik1/fio-api-java.git"
+		}
+	}
 }

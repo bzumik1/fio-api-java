@@ -1,137 +1,212 @@
 # fio-api
 
-A small Java client for the read side of the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictví",
-documentation version 1.9 of 16 October 2025). It downloads account movements as JSON and maps them to typed,
-immutable records, and it moves the server-side bookmark ("zarážka") that marks the last downloaded movement.
+A Java client for the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictví", documentation version 1.9
+of 16 October 2025). It covers the whole API: account movements and official statements, typed or in any format
+the bank offers, the server-side bookmark, a merchant's card transactions, and the submission of payment orders.
 
-It is a standalone library for Java 17 and newer: package and module `io.github.bzumik1.fio`, no Spring, and no runtime dependency other than Jackson 3
-(`tools.jackson.core:jackson-databind`). HTTP goes through `java.net.http.HttpClient`. It started life inside the
-web application of [Nadační fond Nová naděje](https://github.com/bzumik1/nfnn), whose history it keeps.
+- Java 17 and newer, module `io.github.bzumik1.fio`, no framework. The only runtime dependency is Jackson 3
+  (`tools.jackson.core:jackson-databind`); HTTP goes through `java.net.http.HttpClient`.
+- A fluent API over immutable records, with [JSpecify](https://jspecify.dev) nullness annotations.
+- The bank's one-request-per-30-seconds limit is handled by the client, which waits for the next slot instead of
+  failing.
+- The token never appears in a log, a message or an exception.
+- Every line and branch is covered by tests, which run against an in-process stub of the bank.
+
+```kotlin
+dependencies {
+    implementation("io.github.bzumik1:fio-api:1.0.0")
+}
+```
+
+```xml
+<dependency>
+    <groupId>io.github.bzumik1</groupId>
+    <artifactId>fio-api</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
 
 ## Usage
 
 ```java
-FioClient fio = FioClient.builder(FioToken.of(System.getenv("FIO_TOKEN"))).build();
+FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_TOKEN")).build();
 
-FioStatement statement = fio.newTransactions();
+FioStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
 for (FioTransaction transaction : statement.transactions()) {
-    if (transaction.amount().signum() > 0) {
-        System.out.println(transaction.date() + " " + transaction.amount() + " " + transaction.currency()
-                + " VS " + transaction.variableSymbol() + " from " + transaction.counterpartyName());
+    if (transaction.amount().isPositive()) {
+        System.out.println(transaction.date() + " " + transaction.amount()
+                + " VS " + transaction.symbols().variable()
+                + " from " + transaction.counterparty().name());
     }
 }
 ```
 
-| Method | Endpoint | What it does |
-|---|---|---|
-| `newTransactions()` | `GET /last/{token}/transactions.json` | Movements since the last download. The bank moves its bookmark to the newest movement it returns; an empty answer leaves the bookmark where it was. |
-| `transactionsBetween(from, to)` | `GET /periods/{token}/{from}/{to}/transactions.json` | Movements dated from `from` to `to` (`yyyy-MM-dd`). |
-| `setLastDownloadedId(id)` | `GET /set-last-id/{token}/{id}/` | Moves the bookmark to the last movement downloaded successfully, so the next `newTransactions()` starts after it. |
-| `setLastDownloadedDate(date)` | `GET /set-last-date/{token}/{date}/` | Moves the bookmark to the last day that was *not* downloaded successfully; in the documentation's example the next download starts with that day's movements. |
+### Movements
 
-The builder also takes a base URI (default `https://fioapi.fio.cz/v1/rest`, change it for a stub server in tests),
-an `HttpClient` (default: one with a 10-second connect timeout), a `Clock` (used for `FioRateLimitException.retryAfter()`)
-and a request timeout (default 2 minutes). A `FioClient` is immutable and safe to share between threads.
+```java
+FioStatement january = fio.transactions().between(from, to).fetch();
+FioStatement sinceLastTime = fio.transactions().sinceBookmark().fetch();
+FioDocument csv = fio.transactions().between(from, to).download(TransactionFormat.CSV);
+```
+
+`between` downloads the movements dated within a period, both ends included. `sinceBookmark` downloads the
+movements after the bank's bookmark and moves the bookmark to the newest movement it returns; an empty answer
+leaves it where it was. `fetch()` returns typed records from the JSON format; `download(format)` returns the
+bank's answer as it came, in one of `TransactionFormat`'s six formats (CSV, GPC, HTML, JSON, OFX, XML) as a
+`FioDocument` with its media type and bytes.
+
+### Official statements
+
+```java
+StatementId latest = fio.statements().latest().id();
+FioStatement statement = fio.statements().latest().fetch();
+FioDocument pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
+```
+
+A statement comes typed from its JSON format or raw in any of `StatementFormat`'s ten formats, which add PDF,
+MT940 and the CBA and SBA XML formats to the six above.
+
+### The bookmark
+
+```java
+fio.bookmark().moveAfterTransaction(lastProcessedTransactionId);
+fio.bookmark().moveToDate(firstDayThatFailed);
+```
+
+Both move the bookmark `sinceBookmark()` continues from: behind a movement, or to the first movement of a day.
+
+### Card transactions of a merchant
+
+```java
+MerchantStatement cards = fio.merchant().between(from, to).fetch();
+FioDocument csv = fio.merchant().between(from, to).download(MerchantFormat.CSV);
+```
+
+### Payment orders
+
+```java
+ImportResult result = fio.payments().batch()
+        .domestic(payment -> payment
+                .from("2400222222/2010")
+                .to("19-2000145399/0800")
+                .amount(Money.czk("1250.00"))
+                .variableSymbol("20260001")
+                .messageForRecipient("Invoice 2026-0001"))
+        .euro(payment -> payment
+                .from("2400222222/2010")
+                .to("AT611904300234573201")
+                .bic("ABAGATWWXXX")
+                .amount(Money.of("99.90", "EUR"))
+                .beneficiary(Beneficiary.named("Example GmbH")))
+        .submit();
+
+if (!result.isAccepted()) {
+    result.messages().forEach(message -> System.err.println(message.text()));
+}
+```
+
+A batch is built from `DomesticPayment`, `EuroPayment` (SEPA) and `ForeignPayment` orders, each with a builder
+that checks what the bank checks (lengths, digits, allowed values) before anything is sent; `add(PaymentOrder)`
+takes an order built elsewhere. The orders are serialised to Fio's XML import format and posted to the `import`
+endpoint. `upload(PaymentFile)` posts a ready file in any format the bank imports (ABO, Fio XML, pain.001,
+pain.008).
+
+A submitted batch is only accepted: the bank processes it once an authorised person confirms it in internet
+banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the batch
+id, the sums, and a message per rejected order.
+
+### Configuration
+
+```java
+FioClient fio = FioClient.builder(token)
+        .rateLimit(RateLimit.waitUpTo(Duration.ofSeconds(45)))
+        .requestTimeout(Duration.ofSeconds(30))
+        .messageLocale(Locale.forLanguageTag("cs"))
+        .httpClient(myHttpClient)
+        .build();
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `rateLimit` | wait up to 2 minutes | How long a request may wait for the bank's 30-second slot; `RateLimit.failFast()` never waits. |
+| `requestTimeout` | 2 minutes | Timeout of one HTTP request. |
+| `messageLocale` | English | Language of the bank's own messages (Czech, Slovak or English). |
+| `httpClient` | 10-second connect timeout | Your own `java.net.http.HttpClient`, for a proxy or a custom SSL context. |
+| `baseUri` | `https://fioapi.fio.cz/v1/rest` | Where the bank is; point it at a stub in tests. |
+| `clock` | the system clock | The clock the rate limiting and `FioRateLimitException.retryAfter()` use. |
+
+A `FioClient` is immutable and safe to share between threads; requests to one token are serialised through the
+rate limit.
 
 ## The token
 
 Each token belongs to one account and is created in Fio internet banking (Nastavení > API); it becomes usable
 five minutes after it is authorised and lives at most 180 days unless it is renewed. A "Sledování účtu" token is
-enough for everything this library does.
+enough for every download; submitting payments needs a token allowed to do so.
 
-`FioToken` never shows its value: `toString()` prints `FioToken[***]`, and every message, response body and cause
-the client puts into an exception has the token replaced by `***`. Surrounding whitespace is stripped, so a token
-read from a file with a trailing newline works.
+`FioToken` never shows its value: `toString()` prints `FioToken[***]`, and every message, URL, response body and
+cause the client puts into an exception has the token replaced by `***`. `FioToken.of(value)` strips surrounding
+whitespace, so a token read from a file with a trailing newline works; `FioToken.fromEnvironment("FIO_TOKEN")`
+reads it from an environment variable.
 
-## Limits the caller has to respect
+## Limits of the bank, and how the client handles them
 
-- **One request per token per 30 seconds** (`FioClient.MINIMUM_REQUEST_INTERVAL`), whatever the endpoint or format:
-  "a token can be used only once for reading or writing within 30 seconds". Treat the bookmark calls as requests
-  too, so `setLastDownloadedId(...)` followed by `newTransactions()` needs 30 seconds between them. The client neither waits nor throttles; a request made too early fails with
-  `FioRateLimitException` (HTTP 409), whose `retryAfter()` is 30 seconds after the refusal.
-- **90 days of history.** Movements older than 90 days are only available for 10 minutes after the account
-  holder unlocks the full history for the token in internet banking (Nastavení > API, the lock icon). Without it the
-  API answers HTTP 422, which becomes `FioHistoryLockedException`.
-- **50 000 movements per download.** A larger answer is refused with HTTP 413 (a plain `FioException`); ask for a
-  shorter period or move the bookmark forward.
-
-## The model
-
-- `FioStatement(info, transactions)`: one download.
-- `FioAccountInfo`: the `info` block. Account number, bank code, currency, IBAN, BIC, opening and closing balance
-  (`BigDecimal`), the period (`LocalDate`), and the ids of the first, last and last downloaded movement (`Long`).
-- `FioTransaction`: one movement, mapped from the documented columns:
-
-| Column | Fio name | Field | Type |
-|---|---|---|---|
-| 22 | ID pohybu | `id` | `long` |
-| 0 | Datum | `date` | `LocalDate` |
-| 1 | Objem | `amount` | `BigDecimal`, negative for outgoing |
-| 14 | Měna | `currency` | `String` |
-| 2 | Protiúčet | `counterpartyAccount` | `String` |
-| 3 | Kód banky | `counterpartyBankCode` | `String` |
-| 12 | Název banky | `counterpartyBankName` | `String` |
-| 10 | Název protiúčtu | `counterpartyName` | `String` |
-| 4 | KS | `constantSymbol` | `String` |
-| 5 | VS | `variableSymbol` | `String` |
-| 6 | SS | `specificSymbol` | `String` |
-| 7 | Uživatelská identifikace | `userIdentification` | `String` |
-| 8 | Typ | `type` | `String` |
-| 9 | Provedl | `executedBy` | `String` |
-| 16 | Zpráva pro příjemce | `messageForRecipient` | `String` |
-| 17 | ID pokynu | `instructionId` | `Long` |
-| 18 | Upřesnění | `detail` | `String` |
-| 25 | Komentář | `comment` | `String` |
-| 26 | BIC | `bic` | `String` |
-| 27 | Reference plátce | `payerReference` | `String` |
-
-The symbols stay strings because they keep their leading zeros (`"0558"`).
-
-**Missing values.** What the documentation marks as mandatory is never `null`: `id`, `date`, `amount`, `currency`
-and `type` of a movement; `accountId`, `currency`, `iban`, `bic`, `openingBalance` and `closingBalance` of the info
-block. A statement without one of them is rejected. Every other field is `null` when the API sends `null`, leaves
-the column out, or sends only whitespace (Fio often sends `" "` for an empty comment).
-
-**Raw columns.** `FioTransaction.columns()` keeps every column the API sent, keyed by its id, as
-`FioColumn(id, name, value)` with the value as the raw JSON text (`"-1.00"`, `" "`, `"2012-06-26+0200"`). A column this
-model does not know yet is still there.
-
-**Dates.** The documentation describes dates as `yyyy-MM-dd+GMT` (`2012-07-27+0200`); the client takes the calendar
-date and drops the offset. Its JSON examples instead show epoch milliseconds (`1340661600000`); those are read as
-the date in Europe/Prague, which gives the same day.
-
-**Amounts** are `BigDecimal` exactly as sent, scale included (`1.00`, not `1`).
+- **One request per token per 30 seconds**, whatever the endpoint or format. The client keeps the interval between
+  its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only when the
+  wait would exceed `RateLimit.maximumWait()` does the request fail with `FioRateLimitException`, whose
+  `retryAfter()` says when the next request may go.
+- **90 days of history.** Movements older than 90 days (counted from today, Prague time) are available only for 10
+  minutes after the account holder unlocks the full history for the token in internet banking. Without it the bank
+  answers HTTP 422, which becomes `FioHistoryLockedException`.
+- **50 000 movements per download.** A larger answer is refused with HTTP 413, which becomes
+  `FioTooManyTransactionsException`; ask for a shorter period or move the bookmark forward.
+- A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`.
 
 ## Errors
 
-Everything the client throws for a failed request is an unchecked `FioException`, a sealed hierarchy:
+Every failure is a `FioException`, an unchecked exception with the HTTP status and the bank's response body
+(token masked). The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
+`FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException`,
+`FioTooManyTransactionsException`, `FioTransportException` (no answer: connection, timeout, interruption) and the
+plain `FioException` for everything else, including an answer the client does not understand.
 
-| Exception | When |
-|---|---|
-| `FioRateLimitException` | HTTP 409: the token was used less than 30 seconds ago. `retryAfter()` says when to try again. |
-| `FioAuthorizationException` | HTTP 500, which the documentation names for a token that does not exist or is not active; also 401 and 403, which it does not list but which mean the same. |
-| `FioHistoryLockedException` | HTTP 422: older than 90 days and the history is not unlocked. |
-| `FioTransportException` | No answer: connection refused, timeout, interrupted. No status code. |
-| `FioException` | Any other non-2xx status (404 for a malformed URL, 413 for too many movements, ...), or a 2xx answer that is not an account statement. |
+Bad input (a malformed account number, a symbol that is not digits, a period that ends before it starts) fails
+before anything is sent, with an `IllegalArgumentException` that names the problem.
 
-`statusCode()` and `responseBody()` are empty for a transport failure. Invalid arguments (a period that ends before it
-starts, a negative id) throw `IllegalArgumentException` before any request is sent.
+## The model
 
-## Building and testing
+- `FioStatement(info, transactions)`: one download of movements. `FioAccountInfo` holds the account
+  (`DomesticAccount`), IBAN, BIC, currency, opening and closing balance (`Money`), the period, the statement
+  number and the ids of the first, last and bookmarked movement.
+- `FioTransaction`: one movement. `id`, `date`, `amount` (`Money`, negative for outgoing), `type`
+  (`TransactionType`, one of the 45 documented types or `OTHER`) with the bank's `typeLabel`, `counterparty`
+  (account, name, bank name, BIC), `symbols` (variable, constant, specific), `userIdentification`, `executedBy`,
+  `messageForRecipient`, `instructionId`, `detail`, `comment`, `payerReference`, and `columns`, every column the
+  bank sent by its number, for anything new.
+- `Money(amount, currency)`, `DomesticAccount(prefix, number, bankCode)` with `toIban()`, `ForeignAccount(iban)`,
+  `PaymentSymbols`, `Counterparty`, `StatementId(year, number)`.
+- `MerchantStatement(account, iban, bic, currency, period, transactions)` with `CardTransaction` records mapped
+  from the documented XML fields.
+- `FioDocument(mediaType, content)` for a raw download, with `asText()` decoding by the charset the bank named.
 
-```
-./gradlew test
-./gradlew build
-```
-
-`build` also fails when the tests leave any line or branch of the library uncovered (JaCoCo, 100 % required).
-The tests need no network and no Docker: the JSON mapping runs against fixtures built from the documentation's
-examples (`src/test/resources/io/github/bzumik1/fio/`), and the HTTP behaviour against an in-process
-`com.sun.net.httpserver.HttpServer`.
+A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code) is a `DomesticAccount`;
+anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the bank sends for some
+movements, is kept as `"0"`.
 
 ## Documentation
 
-Fio's own documentation of the API, in the version this library follows, is in [`docs/`](docs/README.md).
+`docs/` holds Fio's own documentation of the API in the version this library implements. What the library found
+out by talking to the bank, beyond the documentation, is in the Javadoc of the relevant types.
+
+## Building
+
+```
+./gradlew build                 # compile, test on Java 17, enforce 100 % coverage, javadoc
+./gradlew build -PtestJdk=25    # the same, with the tests running on Java 25
+```
+
+Java 17 is downloaded by Gradle's toolchain; any JDK that runs Gradle 9 is enough. Releases are described in
+[docs/releasing.md](docs/releasing.md).
 
 ## License
 
