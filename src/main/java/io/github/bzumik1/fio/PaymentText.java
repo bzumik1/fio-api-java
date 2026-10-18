@@ -70,8 +70,8 @@ final class PaymentText {
         return value;
     }
 
-    static Money positive(@Nullable Money amount) {
-        Money checked = required(amount, "amount");
+    static Money positive(Money amount) {
+        Money checked = requireNonNull(amount, "amount");
         if (!checked.isPositive()) {
             throw new IllegalArgumentException("A payment amount is positive: " + checked);
         }

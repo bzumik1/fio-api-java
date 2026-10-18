@@ -61,6 +61,7 @@ public record DomesticAccount(@Nullable String prefix, String number, @Nullable 
      * @param number the number
      * @param bankCode the bank code
      * @return the account
+     * @throws IllegalArgumentException when the number is not up to 10 digits or the bank code not 4 digits
      */
     public static DomesticAccount of(String number, String bankCode) {
         return new DomesticAccount(null, number, requireNonNull(bankCode, "bankCode"));

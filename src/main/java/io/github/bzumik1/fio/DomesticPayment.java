@@ -109,6 +109,10 @@ public record DomesticPayment(
     /**
      * Builds a {@link DomesticPayment}. The payer's account, the recipient's account, the amount and the date are
      * required; the type is {@link Type#STANDARD} unless set.
+     *
+     * <p>The setters that read an account number from text refuse a malformed one at once with an
+     * {@link IllegalArgumentException}; {@link #build()} refuses a missing required part with an
+     * {@link IllegalStateException} and checks every other part as {@link DomesticPayment} describes.
      */
     public static final class Builder {
 
@@ -143,6 +147,7 @@ public record DomesticPayment(
          *
          * @param from the account number
          * @return this builder
+         * @throws IllegalArgumentException when the text is not an account number
          */
         public Builder from(String from) {
             return from(DomesticAccount.parse(from));
@@ -164,6 +169,7 @@ public record DomesticPayment(
          *
          * @param to the account number with its bank code
          * @return this builder
+         * @throws IllegalArgumentException when the text is not an account number
          */
         public Builder to(String to) {
             return to(DomesticAccount.parse(to));
@@ -273,7 +279,7 @@ public record DomesticPayment(
          *
          * @return the payment
          * @throws IllegalStateException when a required part is missing
-         * @throws IllegalArgumentException when a part is invalid
+         * @throws IllegalArgumentException when a part is invalid, as {@link DomesticPayment} describes
          */
         public DomesticPayment build() {
             return new DomesticPayment(

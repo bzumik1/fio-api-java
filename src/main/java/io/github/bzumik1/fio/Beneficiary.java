@@ -40,6 +40,8 @@ public record Beneficiary(String name, @Nullable String street, @Nullable String
      *
      * @param name the name
      * @return the beneficiary
+     * @throws IllegalArgumentException when the name is blank, longer than 50 characters or holds a character XML
+     *         cannot carry
      */
     public static Beneficiary named(String name) {
         return new Beneficiary(name, null, null, null);

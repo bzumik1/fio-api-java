@@ -176,9 +176,11 @@ public interface FioClient {
         /**
          * Chooses an official statement by its number.
          *
-         * @param year the year of the statement
+         * @param year the year of the statement, four digits
          * @param number the number of the statement within the year, from 1
          * @return the chosen download
+         * @throws IllegalArgumentException when the year is not four digits or the number is below 1, as
+         *         {@link StatementId} describes
          */
         default StatementRequest number(int year, int number) {
             return number(new StatementId(year, number));

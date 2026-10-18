@@ -125,8 +125,8 @@ class PaymentTextTest {
     }
 
     @Test
-    void should_fail_when_amount_checked_given_no_amount() {
-        assertThatIllegalStateException().isThrownBy(() -> PaymentText.positive(null)).withMessage("The amount is required");
+    void should_reject_naming_the_amount_when_amount_checked_given_no_amount() {
+        assertThatNullPointerException().isThrownBy(() -> PaymentText.positive(null)).withMessage("amount");
     }
 
     static Stream<String> schemaPaymentReasons() {
