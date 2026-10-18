@@ -43,8 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ReadmeExamplesTest {
 
-    private static final Path README = Path.of("README.md");
-    private static final Path CLIENT_SOURCE = Path.of("src/main/java/io/github/bzumik1/fio/FioClient.java");
+    private static final Path PROJECT = projectDirectory();
+    private static final Path README = PROJECT.resolve("README.md");
+    private static final Path CLIENT_SOURCE = PROJECT.resolve("src/main/java/io/github/bzumik1/fio/FioClient.java");
     private static final Pattern JAVA_BLOCK = Pattern.compile("```java\\R(.*?)```", Pattern.DOTALL);
     private static final Pattern JAVADOC_EXAMPLE = Pattern.compile("<pre>\\{@code\\R(.*?)\\R\\s*\\*\\s*}</pre>", Pattern.DOTALL);
     private static final Pattern JAVADOC_MARGIN = Pattern.compile("(?m)^\\s*\\* ?");
@@ -265,6 +266,16 @@ class ReadmeExamplesTest {
             last = heading.group(1);
         }
         return last;
+    }
+
+    private static Path projectDirectory() {
+        Path start = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        for (Path directory = start; directory != null; directory = directory.getParent()) {
+            if (Files.isRegularFile(directory.resolve("README.md")) && Files.isRegularFile(directory.resolve("build.gradle.kts"))) {
+                return directory;
+            }
+        }
+        throw new IllegalStateException("No directory holding README.md and build.gradle.kts above " + start);
     }
 
     private static String read(Path path) {

@@ -4,8 +4,6 @@ import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.time.Instant;
 
 final class StubBank implements BeforeEachCallback, AfterEachCallback {
@@ -28,9 +26,7 @@ final class StubBank implements BeforeEachCallback, AfterEachCallback {
     }
 
     static String printed(Throwable failure) {
-        StringWriter text = new StringWriter();
-        failure.printStackTrace(new PrintWriter(text));
-        return text.toString();
+        return Throwables.printed(failure);
     }
 
     @Override
