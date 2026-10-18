@@ -2,6 +2,7 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
+import javax.net.ssl.SSLHandshakeException;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -146,7 +147,8 @@ final class FioHttp {
         return new FioTransportException(
                 describe(request) + " failed: " + token.mask(cause.toString()),
                 TokenMaskedFailure.withoutToken(cause, token),
-                !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException));
+                !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException
+                        || cause instanceof SSLHandshakeException));
     }
 
     private FioException failure(FioResponse response) {

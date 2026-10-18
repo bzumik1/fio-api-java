@@ -37,7 +37,8 @@ public final class FioTransportException extends FioException {
 
     /**
      * Tells whether the request may have reached the bank before the failure. {@code false} means it certainly did
-     * not: the connection could not be made, or the client gave up before sending. {@code true} means the outcome
+     * not: the connection could not be made, the TLS handshake failed (an untrusted certificate, say), or the
+     * client gave up before sending. {@code true} means the outcome
      * is unknown: the request may have been sent and acted on, so a payment batch or a bookmark move is not to be
      * repeated before checking in Fio internet banking.
      *

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -134,6 +136,22 @@ class TransportFailureTest {
         FioTransportException failure = fetchFailure(clientFailingWith(new HttpConnectTimeoutException("connect timed out")));
 
         assertThat(failure.mayHaveReachedTheBank()).isFalse();
+    }
+
+    @Test
+    void should_raise_transport_failure_that_never_reached_the_bank_when_downloading_given_failed_tls_handshake() {
+        FioTransportException failure = fetchFailure(clientFailingWith(
+                new SSLHandshakeException("PKIX path building failed: unable to find valid certification path")));
+
+        assertThat(failure.mayHaveReachedTheBank()).isFalse();
+        assertThat(failure).hasMessageContaining("PKIX path building failed");
+    }
+
+    @Test
+    void should_raise_transport_failure_that_may_have_reached_the_bank_when_downloading_given_tls_failure_after_the_handshake() {
+        FioTransportException failure = fetchFailure(clientFailingWith(new SSLException("Tag mismatch")));
+
+        assertThat(failure.mayHaveReachedTheBank()).isTrue();
     }
 
     @Test
