@@ -71,8 +71,7 @@ class PaymentBatchTest {
         DomesticPayment fromAnotherAccount = domesticBuilder().from("2400222222/2010").build();
 
         assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), domestic(), fromAnotherAccount))
-                .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
-                        + "1234562 and 2400222222/2010");
+                .withMessage("Every order in a batch is from the same account: 1234562 and 2400222222/2010");
     }
 
     @Test

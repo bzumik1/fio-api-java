@@ -598,26 +598,38 @@ class HttpPaymentsTest {
     }
 
     @Test
-    void should_refuse_as_state_without_request_when_submitted_given_orders_from_two_accounts() {
-        FioClient.BatchRequest batch = client().payments().batch()
-                .add(domestic())
-                .domestic(order -> order.from("2400222222/2010").to("19-2000145399/0800").amount(Money.czk("1")).date(DUE));
+    void should_refuse_the_order_naming_both_accounts_and_keep_the_batch_when_added_given_batch_from_another_account() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient.BatchRequest batch = client().payments().batch().add(domestic());
 
-        assertThatIllegalStateException().isThrownBy(batch::submit)
-                .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
-                        + "1234562 and 2400222222/2010")
-                .withCauseInstanceOf(IllegalArgumentException.class);
-        assertThat(server().requests()).isEmpty();
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> batch.domestic(order -> order
+                        .from("2400222222/2010").to("19-2000145399/0800").amount(Money.czk("1")).date(DUE)))
+                .withMessage("The order is from 2400222222/2010, but the batch is from 1234562; every order in a "
+                        + "batch is from the same account");
+        assertThat(batch.submit()).isEqualTo(ACCEPTED);
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
     }
 
-    @Test
-    void should_refuse_as_state_without_request_when_submitted_given_orders_in_two_currencies() {
-        FioClient.BatchRequest batch = client().payments().batch().add(domestic()).add(euro());
+    static Stream<Arguments> ordersInAnotherCurrency() {
+        return Stream.of(
+                argumentSet("ready euro order", (Consumer<FioClient.BatchRequest>) batch -> batch.add(euro())),
+                argumentSet("euro payment", (Consumer<FioClient.BatchRequest>) batch -> batch.euro(order -> order
+                        .from(PaymentSamples.PAYER).to("AT611904300234573201").amount(euro("1")).date(DUE).beneficiary("Hans"))),
+                argumentSet("domestic payment in euro", (Consumer<FioClient.BatchRequest>) batch -> batch.add(domesticInEuro())));
+    }
 
-        assertThatIllegalStateException().isThrownBy(batch::submit)
-                .withMessage("Every order in a batch is in the account's currency: CZK and EUR")
-                .withCauseInstanceOf(IllegalArgumentException.class);
-        assertThat(server().requests()).isEmpty();
+    @ParameterizedTest
+    @MethodSource("ordersInAnotherCurrency")
+    void should_refuse_the_order_naming_both_currencies_and_keep_the_batch_when_added_given_batch_in_another_currency(
+            Consumer<FioClient.BatchRequest> addition) {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient.BatchRequest batch = client().payments().batch().add(domestic());
+
+        assertThatIllegalArgumentException().isThrownBy(() -> addition.accept(batch))
+                .withMessage("The order is in EUR, but the batch is in CZK; every order in a batch is in the same currency");
+        assertThat(batch.submit()).isEqualTo(ACCEPTED);
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
     }
 
     static Stream<Arguments> additions() {

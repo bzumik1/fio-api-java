@@ -108,8 +108,22 @@ final class HttpPayments implements FioClient.Payments {
             if (submitted) {
                 throw new IllegalStateException("The batch was already submitted; build a new one to add orders");
             }
+            if (!orders.isEmpty()) {
+                requireConsistentWith(orders.get(0), order);
+            }
             orders.add(order);
             return this;
+        }
+
+        private static void requireConsistentWith(PaymentOrder first, PaymentOrder order) {
+            if (!order.from().number().equals(first.from().number())) {
+                throw new IllegalArgumentException("The order is from " + order.from() + ", but the batch is from "
+                        + first.from() + "; every order in a batch is from the same account");
+            }
+            if (!order.amount().currency().equals(first.amount().currency())) {
+                throw new IllegalArgumentException("The order is in " + order.amount().currency() + ", but the batch is in "
+                        + first.amount().currency() + "; every order in a batch is in the same currency");
+            }
         }
 
         @Override
@@ -120,10 +134,9 @@ final class HttpPayments implements FioClient.Payments {
             if (orders.isEmpty()) {
                 throw new IllegalStateException("The batch holds no payment order to submit");
             }
-            PaymentBatch batch;
+            PaymentBatch batch = new PaymentBatch(orders);
             byte[] xml;
             try {
-                batch = new PaymentBatch(orders);
                 xml = importFile(batch);
             } catch (IllegalArgumentException e) {
                 throw new IllegalStateException(e.getMessage(), e);

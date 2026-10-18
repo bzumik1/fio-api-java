@@ -141,9 +141,11 @@ if (!result.isAccepted()) {
 }
 ```
 
-A token belongs to one account, and every order in a batch is from that account and in its currency; a batch
-with orders from two accounts, or in two currencies, is refused before anything is sent. From a euro account, with its own token, the
-same batch takes SEPA payments:
+A token belongs to one account, and the bank refuses orders from any other. The client cannot know the token's
+account, so it keeps a batch to the account and currency of its first order: `add`, `domestic`, `euro` and
+`foreign` refuse an order from another account or in another currency with an `IllegalArgumentException`, and so
+does a `PaymentBatch` with orders from two accounts or in two currencies, before anything is sent. Euro payments
+therefore go in a batch of their own, submitted with the euro account's token:
 
 ```java
 FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_EUR_TOKEN")).build();

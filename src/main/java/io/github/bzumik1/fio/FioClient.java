@@ -345,6 +345,10 @@ public interface FioClient {
      * {@link FioRateLimitException} without a status or a {@link FioTransportException} whose
      * {@link FioTransportException#mayHaveReachedTheBank()} is {@code false}, leaves it unspent, so the same batch
      * can be submitted again.
+     *
+     * <p>Every order is checked as it is added against the batch's first order: it has to be from the same account
+     * and in the same currency. The client cannot know which account the token belongs to; it only keeps the batch
+     * consistent, and the bank refuses orders from any account other than the token's.
      */
     interface BatchRequest {
 
@@ -356,7 +360,8 @@ public interface FioClient {
          * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
          *         already submitted
          * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
-         *         {@link DomesticPayment.Builder#build()} describes
+         *         {@link DomesticPayment.Builder#build()} describes, or the payment is from another account or in
+         *         another currency than the batch's first order
          */
         BatchRequest domestic(Consumer<DomesticPayment.Builder> order);
 
@@ -368,7 +373,8 @@ public interface FioClient {
          * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
          *         already submitted
          * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
-         *         {@link EuroPayment.Builder#build()} describes
+         *         {@link EuroPayment.Builder#build()} describes, or the payment is from another account or in
+         *         another currency than the batch's first order
          */
         BatchRequest euro(Consumer<EuroPayment.Builder> order);
 
@@ -380,7 +386,8 @@ public interface FioClient {
          * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
          *         already submitted
          * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
-         *         {@link ForeignPayment.Builder#build()} describes
+         *         {@link ForeignPayment.Builder#build()} describes, or the payment is from another account or in
+         *         another currency than the batch's first order
          */
         BatchRequest foreign(Consumer<ForeignPayment.Builder> order);
 
@@ -390,6 +397,8 @@ public interface FioClient {
          * @param order the order
          * @return this batch
          * @throws IllegalStateException when the batch was already submitted
+         * @throws IllegalArgumentException when the order is from another account or in another currency than the
+         *         batch's first order
          */
         BatchRequest add(PaymentOrder order);
 
@@ -401,12 +410,11 @@ public interface FioClient {
          * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
          *         answers in a way this client cannot read; when its {@link FioException#mayHaveTakenEffect()} is
          *         {@code true}, check the pending batches in Fio internet banking before submitting again
-         * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
-         *         one the token belongs to) and in the same currency, the batch written as Fio XML is larger than
+         * @throws IllegalStateException when the batch is empty, the batch written as Fio XML is larger than
          *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted by a call that may have reached the
-         *         bank, as the {@linkplain BatchRequest batch} describes; the account, currency and size
-         *         checks are an {@link IllegalArgumentException} from {@link PaymentBatch} and
-         *         {@link Payments#submit(PaymentBatch)}, where the batch is an argument
+         *         bank, as the {@linkplain BatchRequest batch} describes; the size check is an
+         *         {@link IllegalArgumentException} from {@link Payments#submit(PaymentBatch)}, where the batch is an
+         *         argument
          */
         ImportResult submit();
     }

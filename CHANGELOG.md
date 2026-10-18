@@ -32,7 +32,8 @@ All notable changes to this library are recorded here. The format follows
 - `mayHaveTakenEffect()` is true for HTTP 502 and 504, which a gateway sends after passing the request on, and
   false for the statuses with which the bank refuses, 500 among them.
 - Payment batches are checked before sending: one account, one currency, at most 2 MiB of Fio XML. A batch
-  request is spent by a submission that may have reached the bank, so it cannot pay twice, and stays open after
+  request refuses an order from another account or in another currency than its first order as the order is
+  added, is spent by a submission that may have reached the bank, so it cannot pay twice, and stays open after
   one that never left the client.
 - Bounded response numbers: a decimal the bank sends has at most 40 digits before the point and 1000 after it,
   so a hostile answer cannot make the client build a huge `BigDecimal`.
