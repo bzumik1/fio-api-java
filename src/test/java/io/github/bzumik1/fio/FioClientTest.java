@@ -259,7 +259,7 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_when_latest_statement_requested_given_answer_that_is_not_a_number() {
+    void should_raise_malformed_response_when_latest_statement_requested_given_answer_that_is_not_a_number() {
         server().respondWith(200, "text/plain", "<html>Údržba</html>".getBytes(StandardCharsets.UTF_8));
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().statementId());
@@ -269,7 +269,7 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_with_ok_status_when_latest_statement_requested_given_statement_number_zero() {
+    void should_raise_malformed_response_with_ok_status_when_latest_statement_requested_given_statement_number_zero() {
         server().respondWith(200, "text/plain", "2026,0".getBytes(StandardCharsets.UTF_8));
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().statementId());
@@ -671,7 +671,7 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_with_reason_when_downloading_given_ok_answer_that_is_not_a_statement() {
+    void should_raise_malformed_response_with_reason_when_downloading_given_ok_answer_that_is_not_a_statement() {
         server().respondWith(200, "<html>Údržba " + SECRET + "</html>");
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client().transactions().sinceBookmark().fetch());
