@@ -791,6 +791,17 @@ class FioClientTest {
     }
 
     @Test
+    void should_keep_the_first_16_ki_characters_masked_when_refused_given_error_page_of_one_mebibyte() {
+        server().respondWith(400, "text/html", (SECRET + "y".repeat(1024 * 1024)).getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> client().transactions().sinceBookmark().fetch());
+
+        assertThat(failure.statusCode()).hasValue(400);
+        assertThat(failure.responseBody()).hasValue("***" + "y".repeat(FioException.RESPONSE_BODY_LIMIT - 3) + "\u2026");
+        assertThat(failure.getMessage()).hasSizeLessThan(300);
+    }
+
+    @Test
     void should_permit_only_documented_failures_when_switched_over_given_sealed_hierarchy() {
         List<Class<?>> permitted = List.of(FioException.class.getPermittedSubclasses());
 

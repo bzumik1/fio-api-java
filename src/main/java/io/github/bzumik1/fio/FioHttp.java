@@ -34,6 +34,7 @@ final class FioHttp {
 
     static final Set<String> MESSAGE_LANGUAGES = Set.of("cs", "sk", "en");
     static final int RESPONSE_SIZE_LIMIT = 256 * 1024 * 1024;
+    private static final int MAXIMUM_BYTES_PER_CHARACTER = 4;
 
     private final FioToken token;
     private final String baseUri;
@@ -93,7 +94,7 @@ final class FioHttp {
                             + " and a body this client does not understand: "
                             + token.maskExcerpt(MalformedResponseException.excerpt(e.getMessage(), FioException.RESPONSE_BODY_LIMIT)),
                     response.status(),
-                    token.mask(response.text()),
+                    maskedExcerpt(response),
                     TokenMaskedFailure.withoutToken(e, token));
         }
     }
@@ -146,7 +147,7 @@ final class FioHttp {
                     + " bytes, which this client does not read", responseSizeLimit, TokenMaskedFailure.withoutToken(cause, token));
         }
         return new FioTransportException(
-                describe(request) + " failed: " + token.mask(cause.toString()),
+                describe(request) + " failed: " + token.maskExcerpt(cause.toString()),
                 TokenMaskedFailure.withoutToken(cause, token),
                 !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException
                         || cause instanceof SSLHandshakeException));
@@ -154,7 +155,7 @@ final class FioHttp {
 
     private FioException failure(FioResponse response) {
         int status = response.status();
-        String body = token.mask(response.text());
+        String body = maskedExcerpt(response);
         String refused = response.description() + " was refused with HTTP " + status;
         return switch (status) {
             case 409 -> new FioRateLimitException(
@@ -175,6 +176,16 @@ final class FioHttp {
                     body);
             default -> new FioException(refused, status, body);
         };
+    }
+
+    private String maskedExcerpt(FioResponse response) {
+        int tokenLength = token.value().length();
+        int decodedBytes = (FioException.RESPONSE_BODY_LIMIT + tokenLength) * MAXIMUM_BYTES_PER_CHARACTER;
+        String masked = token.maskExcerpt(response.text(decodedBytes));
+        if (response.body().length > decodedBytes && masked.length() < FioException.RESPONSE_BODY_LIMIT + tokenLength) {
+            masked = token.maskExcerpt(response.text());
+        }
+        return MalformedResponseException.excerpt(masked, FioException.RESPONSE_BODY_LIMIT);
     }
 
     private String describe(HttpRequest request) {
@@ -264,6 +275,10 @@ final class FioHttp {
 
         String text() {
             return new String(body, StandardCharsets.UTF_8);
+        }
+
+        String text(int mostBytes) {
+            return new String(body, 0, Math.min(body.length, mostBytes), StandardCharsets.UTF_8);
         }
 
         Download document(Charset documentedCharset) {
