@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.LocalDate;
+import java.util.AbstractMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -54,6 +55,25 @@ class TransactionTest {
         Transaction transaction = transaction(DATE, AMOUNT, TYPE, LABEL, COUNTERPARTY, SYMBOLS, columns);
 
         assertThat(transaction.columns().keySet()).containsExactly(0, 8, 22);
+    }
+
+    @Test
+    void should_take_the_columns_as_given_when_created_given_null_value_and_key_other_than_the_column_id() {
+        Map<Integer, TransactionColumn> columns = new LinkedHashMap<>();
+        columns.put(5, ID);
+        columns.put(7, null);
+
+        Transaction transaction = transaction(DATE, AMOUNT, TYPE, LABEL, COUNTERPARTY, SYMBOLS, columns);
+
+        assertThat(transaction.columns()).containsExactly(Map.entry(5, ID), new AbstractMap.SimpleEntry<>(7, null));
+    }
+
+    @Test
+    void should_reject_when_created_given_column_with_null_key() {
+        Map<Integer, TransactionColumn> columns = new LinkedHashMap<>();
+        columns.put(null, ID);
+
+        assertThatNullPointerException().isThrownBy(() -> transaction(DATE, AMOUNT, TYPE, LABEL, COUNTERPARTY, SYMBOLS, columns));
     }
 
     static Stream<Arguments> missingParts() {
