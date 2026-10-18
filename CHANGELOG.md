@@ -13,7 +13,8 @@ All notable changes to this library are recorded here. The format follows
   transactions of a merchant, every download format the bank offers (JSON, XML, CSV, GPC, HTML, OFX, MT940
   as `sta`, CBA XML, SBA XML, PDF) and payment import (domestic, euro and foreign payments built in Java or an
   ABO, Fio XML, pain.001 or pain.008 file), answered with an `ImportResult` that holds the status, the
-  `batchId` the bank gave the batch, the sums and the bank's messages per order.
+  `batchId` the bank gave the batch, the sums (a sum's debit and credit are in its currency) and the bank's
+  messages per order.
 - A fluent API: `fio.transactions().between(from, to).fetch()`, `fio.statements().latest()`,
   `fio.bookmark().moveAfterTransaction(id)`, `fio.merchant().between(from, to).fetch()`,
   `fio.payments().batch().domestic(p -> ...).submit()`.

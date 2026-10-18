@@ -13,6 +13,7 @@ import java.util.Currency;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -59,6 +60,24 @@ class ImportResultTest {
     @Test
     void should_reject_when_created_given_sum_without_currency() {
         assertThatNullPointerException().isThrownBy(() -> new Sum(null, null, null)).withMessage("currency");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "EUR|CZK|The debit sum 1 EUR is not in the sum's currency CZK",
+            "CZK|EUR|The credit sum 1 EUR is not in the sum's currency CZK"})
+    void should_reject_naming_both_currencies_when_created_given_debit_or_credit_in_another_currency(
+            String debit, String credit, String message) {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> new Sum(CZK, Money.of("1", debit), Money.of("1", credit)))
+                .withMessage(message);
+    }
+
+    @Test
+    void should_keep_both_sums_when_created_given_debit_and_credit_in_the_sum_currency() {
+        Sum sum = new Sum(EUR, Money.of("2", "EUR"), Money.of("3", "EUR"));
+
+        assertThat(sum).returns(Money.of("2", "EUR"), Sum::debit).returns(Money.of("3", "EUR"), Sum::credit);
     }
 
     @Test

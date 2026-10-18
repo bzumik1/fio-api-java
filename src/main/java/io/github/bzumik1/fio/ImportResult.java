@@ -77,14 +77,24 @@ public record ImportResult(
     public record Sum(Currency currency, @Nullable Money debit, @Nullable Money credit) {
 
         /**
-         * Validates the currency.
+         * Validates the currency and that both sums are in it.
          *
          * @param currency the currency
          * @param debit the sum of the debit orders
          * @param credit the sum of the credit orders
+         * @throws IllegalArgumentException when the debit or the credit sum is in another currency
          */
         public Sum {
             requireNonNull(currency, "currency");
+            requireIn(currency, "debit", debit);
+            requireIn(currency, "credit", credit);
+        }
+
+        private static void requireIn(Currency currency, String side, @Nullable Money sum) {
+            if (sum != null && !sum.currency().equals(currency)) {
+                throw new IllegalArgumentException("The " + side + " sum " + sum + " is not in the sum's currency "
+                        + currency.getCurrencyCode());
+            }
         }
     }
 
