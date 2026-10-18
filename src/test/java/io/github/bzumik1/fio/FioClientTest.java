@@ -475,11 +475,12 @@ class FioClientTest {
         assertThat(pdf.content()).hasSize(1024);
     }
 
-    @Test
-    void should_reject_when_maximum_response_size_set_given_size_not_positive() {
-        assertThatThrownBy(() -> bank.builder().maximumResponseSize(0))
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, Integer.MIN_VALUE})
+    void should_reject_when_maximum_response_size_set_given_size_not_positive(int bytes) {
+        assertThatThrownBy(() -> bank.builder().maximumResponseSize(bytes))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The maximum response size must be positive: 0");
+                .hasMessage("The maximum response size must be positive: " + bytes);
     }
 
     @Test
