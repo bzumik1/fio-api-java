@@ -237,4 +237,5 @@ Java 17 is downloaded by Gradle's toolchain; any JDK that runs Gradle 9 is enoug
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Fio banka's documentation in `docs/` and the XML schemas in `src/test/resources/schema/` are
+Fio's own and are not covered by it; see [docs/README.md](docs/README.md).

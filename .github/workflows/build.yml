@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -17,14 +18,25 @@ jobs:
     name: Build and test on Java ${{ matrix.java }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew build -PtestJdk=${{ matrix.java }}
-      - uses: actions/upload-artifact@v4
+          java-version: |
+            ${{ matrix.java }}
+            17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Build, test on Java ${{ matrix.java }} and check the coverage
+        env:
+          TEST_JDK: ${{ matrix.java }}
+        run: >
+          ./gradlew build
+          -PtestJdk="$TEST_JDK"
+          -Porg.gradle.java.installations.fromEnv="JAVA_HOME_${TEST_JDK}_X64"
+          -Porg.gradle.java.installations.auto-download=false
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: test-reports-java-${{ matrix.java }}

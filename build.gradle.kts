@@ -34,6 +34,22 @@ tasks.withType<JavaCompile>().configureEach {
 	options.compilerArgs.addAll(listOf("-Xlint:all,-module", "-Werror"))
 }
 
+tasks.withType<AbstractArchiveTask>().configureEach {
+	isPreserveFileTimestamps = false
+	isReproducibleFileOrder = true
+}
+
+tasks.jar {
+	manifest {
+		attributes(
+			"Implementation-Title" to project.name,
+			"Implementation-Version" to project.version,
+			"Implementation-Vendor" to "Jakub Znamenáček",
+			"Implementation-URL" to "https://github.com/bzumik1/fio-api-java"
+		)
+	}
+}
+
 tasks.javadoc {
 	options.encoding = "UTF-8"
 	(options as StandardJavadocDocletOptions).apply {
@@ -49,7 +65,30 @@ tasks.test {
 		languageVersion = testJdk
 	}
 	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
+	maxHeapSize = "512m"
 	finalizedBy(tasks.jacocoTestReport)
+}
+
+val moduleSmoke by sourceSets.creating
+
+configurations[moduleSmoke.implementationConfigurationName].extendsFrom(configurations.api.get(), configurations.implementation.get())
+
+dependencies {
+	moduleSmoke.implementationConfigurationName(files(tasks.jar))
+}
+
+val moduleSmokeTest by tasks.registering(JavaExec::class) {
+	group = "verification"
+	description = "Runs a consumer of the built jar on the module path"
+	classpath = moduleSmoke.runtimeClasspath
+	mainModule = "io.github.bzumik1.fio.smoke"
+	mainClass = "io.github.bzumik1.fio.smoke.ModuleSmoke"
+	val statement = layout.projectDirectory.file("src/test/resources/io/github/bzumik1/fio/periods-statement.json")
+	inputs.file(statement)
+	args(statement.asFile.path)
+	javaLauncher = javaToolchains.launcherFor {
+		languageVersion = testJdk
+	}
 }
 
 tasks.jacocoTestReport {
@@ -77,7 +116,7 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-	dependsOn(tasks.jacocoTestCoverageVerification)
+	dependsOn(tasks.jacocoTestCoverageVerification, moduleSmokeTest)
 }
 
 mavenPublishing {
