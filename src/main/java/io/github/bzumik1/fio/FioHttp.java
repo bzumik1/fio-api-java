@@ -3,13 +3,9 @@ package io.github.bzumik1.fio;
 import org.jspecify.annotations.Nullable;
 
 import java.net.ConnectException;
-import java.net.http.HttpConnectTimeoutException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
@@ -22,6 +18,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import static io.github.bzumik1.fio.FioClient.MINIMUM_REQUEST_INTERVAL;
@@ -95,16 +95,12 @@ final class FioHttp {
     }
 
     private FioResponse exchange(HttpRequest request) {
+        CompletableFuture<HttpResponse<byte[]>> pending = sendAsync(request);
         HttpResponse<byte[]> response;
-        CompletableFuture<HttpResponse<byte[]>> pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
         try {
             response = pending.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            throw new FioTransportException(
-                    describe(request) + " failed: " + token.mask(cause.toString()),
-                    TokenMaskedFailure.withoutToken(cause, token),
-                    !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException));
+            throw failed(request, e.getCause());
         } catch (TimeoutException e) {
             pending.cancel(true);
             throw new FioTransportException(
@@ -126,6 +122,21 @@ final class FioHttp {
             throw failure(answer);
         }
         return answer;
+    }
+
+    private CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
+        try {
+            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
+        } catch (RuntimeException e) {
+            throw failed(request, e);
+        }
+    }
+
+    private FioTransportException failed(HttpRequest request, Throwable cause) {
+        return new FioTransportException(
+                describe(request) + " failed: " + token.mask(cause.toString()),
+                TokenMaskedFailure.withoutToken(cause, token),
+                !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException));
     }
 
     private FioException failure(FioResponse response) {

@@ -1,10 +1,10 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.Serial;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.List;
 import java.util.Set;
 
 final class TokenMaskedFailure extends Exception {
@@ -18,30 +18,40 @@ final class TokenMaskedFailure extends Exception {
     }
 
     static Throwable withoutToken(Throwable failure, FioToken token) {
-        List<Throwable> chain = chainOf(failure);
-        if (chain.stream().noneMatch(current -> token.occursIn(current.toString()))) {
-            return failure;
-        }
-        TokenMaskedFailure first = null;
-        TokenMaskedFailure last = null;
-        for (Throwable current : chain) {
-            TokenMaskedFailure masked = new TokenMaskedFailure(token.mask(current.toString()), current.getStackTrace());
-            if (last == null) {
-                first = masked;
-            } else {
-                last.initCause(masked);
-            }
-            last = masked;
-        }
-        return first;
+        return mentions(failure, token, identitySet()) ? copy(failure, token, identitySet()) : failure;
     }
 
-    private static List<Throwable> chainOf(Throwable failure) {
-        List<Throwable> chain = new ArrayList<>();
-        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Throwable current = failure; current != null && seen.add(current); current = current.getCause()) {
-            chain.add(current);
+    private static boolean mentions(@Nullable Throwable failure, FioToken token, Set<Throwable> visited) {
+        if (failure == null || !visited.add(failure)) {
+            return false;
         }
-        return chain;
+        if (token.occursIn(failure.toString())) {
+            return true;
+        }
+        for (Throwable suppressed : failure.getSuppressed()) {
+            if (mentions(suppressed, token, visited)) {
+                return true;
+            }
+        }
+        return mentions(failure.getCause(), token, visited);
+    }
+
+    private static TokenMaskedFailure copy(Throwable failure, FioToken token, Set<Throwable> copied) {
+        copied.add(failure);
+        TokenMaskedFailure masked = new TokenMaskedFailure(token.mask(failure.toString()), failure.getStackTrace());
+        for (Throwable suppressed : failure.getSuppressed()) {
+            if (!copied.contains(suppressed)) {
+                masked.addSuppressed(copy(suppressed, token, copied));
+            }
+        }
+        Throwable cause = failure.getCause();
+        if (cause != null && !copied.contains(cause)) {
+            masked.initCause(copy(cause, token, copied));
+        }
+        return masked;
+    }
+
+    private static Set<Throwable> identitySet() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
     }
 }

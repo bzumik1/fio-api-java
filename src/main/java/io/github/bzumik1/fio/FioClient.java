@@ -485,12 +485,13 @@ public interface FioClient {
          * @return the client
          */
         public FioClient build() {
-            HttpClient client = httpClient != null
-                    ? httpClient
-                    : HttpClient.newBuilder().connectTimeout(DEFAULT_CONNECT_TIMEOUT).build();
             RequestPacer pacer = new RequestPacer(rateLimit, clock, sleeper);
-            FioHttp http = new FioHttp(token, baseUri, client, clock, requestTimeout, pacer, messageLocale);
+            FioHttp http = new FioHttp(token, baseUri, httpClientOrDefault(), clock, requestTimeout, pacer, messageLocale);
             return new HttpFioClient(http);
+        }
+
+        HttpClient httpClientOrDefault() {
+            return httpClient != null ? httpClient : HttpClient.newBuilder().connectTimeout(DEFAULT_CONNECT_TIMEOUT).build();
         }
     }
 }
