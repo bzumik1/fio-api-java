@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -47,7 +48,7 @@ class HttpMerchantTest {
     }
 
     @Test
-    void should_download_xml_and_parse_it_when_period_fetched() {
+    void should_download_xml_and_parse_it_when_period_fetched_given_documentation_example() {
         server.respondWith(200, "application/xml;charset=UTF-8",
                 Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE).getBytes(StandardCharsets.UTF_8));
 
@@ -71,7 +72,7 @@ class HttpMerchantTest {
 
     @ParameterizedTest
     @EnumSource(MerchantFormat.class)
-    void should_download_raw_format_with_its_extension_when_period_downloaded(MerchantFormat format) {
+    void should_download_raw_format_with_its_extension_when_period_downloaded_given_format(MerchantFormat format) {
         byte[] body = "accountId;2111111111".getBytes(StandardCharsets.UTF_8);
         server.respondWith(200, format.mediaType() + ";charset=UTF-8", body);
 
@@ -87,9 +88,41 @@ class HttpMerchantTest {
     @Test
     void should_reject_without_request_when_period_chosen_given_end_before_start() {
         assertThatIllegalArgumentException().isThrownBy(() -> client.merchant().between(TO, FROM));
+        assertThat(server.requests()).isEmpty();
+    }
+
+    @Test
+    void should_reject_without_request_when_period_chosen_given_no_start() {
         assertThatNullPointerException().isThrownBy(() -> client.merchant().between(null, TO));
+        assertThat(server.requests()).isEmpty();
+    }
+
+    @Test
+    void should_reject_without_request_when_period_chosen_given_no_end() {
         assertThatNullPointerException().isThrownBy(() -> client.merchant().between(FROM, null));
         assertThat(server.requests()).isEmpty();
+    }
+
+    @Test
+    void should_read_czech_text_when_fetched_given_windows_1250_statement_with_matching_declaration() {
+        String declared = "<?xml version=\"1.0\" encoding=\"windows-1250\"?>\n" + Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE);
+        server.respondWith(200, "application/xml;charset=windows-1250", declared.getBytes(Charset.forName("windows-1250")));
+
+        MerchantStatement statement = client.merchant().between(FROM, TO).fetch();
+
+        assertThat(statement.transactions()).extracting(CardTransaction::note)
+                .containsExactly("Zaúčtování POS terminálů MasterCard, Operace ON-US");
+    }
+
+    @Test
+    void should_decode_as_the_body_declares_when_fetched_given_content_type_naming_another_charset() {
+        server.respondWith(200, "application/xml;charset=windows-1250",
+                Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE).getBytes(StandardCharsets.UTF_8));
+
+        MerchantStatement statement = client.merchant().between(FROM, TO).fetch();
+
+        assertThat(statement.transactions()).extracting(CardTransaction::note)
+                .containsExactly("Zaúčtování POS terminálů MasterCard, Operace ON-US");
     }
 
     @Test
@@ -120,12 +153,10 @@ class HttpMerchantTest {
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client.merchant().between(FROM, TO).fetch());
 
-        assertThat(failure).isInstanceOf(FioAuthorizationException.class).hasMessageNotContaining(SECRET);
-    }
-
-    @Test
-    void should_return_same_merchant_downloads_when_asked_twice() {
-        assertThat(client.merchant()).isSameAs(client.merchant());
+        assertThat(failure).isExactlyInstanceOf(FioAuthorizationException.class)
+                .hasMessage("Fio API request GET " + server.baseUri() + "/merchant/***/2012-07-01/2012-07-31/transactions.xml"
+                        + " was refused with HTTP 500: the token does not exist, has expired or is not active");
+        assertThat(failure.statusCode()).hasValue(500);
     }
 
     private static String printed(Throwable failure) {

@@ -4,22 +4,28 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.math.BigDecimal;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.Fixtures.MERCHANT_DOCUMENTATION_EXAMPLE;
 import static io.github.bzumik1.fio.Fixtures.MERCHANT_SCHEMA_EXAMPLE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 class MerchantStatementParserTest {
 
@@ -90,22 +96,25 @@ class MerchantStatementParserTest {
     void should_read_namespaced_schema_spelling_when_parsed_given_schema_example() {
         MerchantStatement statement = parser.parse(Fixtures.read(MERCHANT_SCHEMA_EXAMPLE));
 
-        assertThat(statement.account()).isEqualTo(DomesticAccount.parse("19-2000145399/2010"));
-        assertThat(statement.currency()).isEqualTo(Currency.getInstance("EUR"));
-        assertThat(statement.dateStart()).isNull();
-        assertThat(statement.dateEnd()).isNull();
-        assertThat(statement.transactions()).hasSize(2);
-        assertThat(statement.transactions().get(0))
-                .returns(8216165941L, CardTransaction::operationId)
-                .returns(Money.of("-12.50", "EUR"), CardTransaction::amount)
-                .returns(OffsetDateTime.parse("2026-01-04T23:59:59.250Z"), CardTransaction::transactionDateTime)
-                .returns(Money.of("-12.50", "EUR"), CardTransaction::transactionAmount)
-                .returns(CardTransactionType.FOREIGN, CardTransaction::type)
-                .returns("FOREIGN", CardTransaction::typeLabel)
-                .returns("VISA", CardTransaction::cardIssuer)
-                .returns(Money.of("0.10", "EUR"), CardTransaction::cardAssociationFee)
-                .returns(false, CardTransaction::settled)
-                .returns("12345678911234567891", CardTransaction::variableSymbol);
+        assertSoftly(softly -> {
+            softly.assertThat(statement)
+                    .returns(DomesticAccount.parse("19-2000145399/2010"), MerchantStatement::account)
+                    .returns(Currency.getInstance("EUR"), MerchantStatement::currency)
+                    .returns(null, MerchantStatement::dateStart)
+                    .returns(null, MerchantStatement::dateEnd);
+            softly.assertThat(statement.transactions()).hasSize(2);
+            softly.assertThat(statement.transactions().get(0))
+                    .returns(8216165941L, CardTransaction::operationId)
+                    .returns(Money.of("-12.50", "EUR"), CardTransaction::amount)
+                    .returns(OffsetDateTime.parse("2026-01-04T23:59:59.250Z"), CardTransaction::transactionDateTime)
+                    .returns(Money.of("-12.50", "EUR"), CardTransaction::transactionAmount)
+                    .returns(CardTransactionType.FOREIGN, CardTransaction::type)
+                    .returns("FOREIGN", CardTransaction::typeLabel)
+                    .returns("VISA", CardTransaction::cardIssuer)
+                    .returns(Money.of("0.10", "EUR"), CardTransaction::cardAssociationFee)
+                    .returns(false, CardTransaction::settled)
+                    .returns("12345678911234567891", CardTransaction::variableSymbol);
+        });
     }
 
     @Test
@@ -130,18 +139,20 @@ class MerchantStatementParserTest {
         CardTransaction transaction = only(transaction(
                 "note", "   ", "branchName", "", "transactionId", "", "settlement", " "));
 
-        assertThat(transaction.note()).isNull();
-        assertThat(transaction.branchName()).isNull();
-        assertThat(transaction.transactionId()).isNull();
-        assertThat(transaction.settled()).isNull();
+        assertThat(transaction)
+                .returns(null, CardTransaction::note)
+                .returns(null, CardTransaction::branchName)
+                .returns(null, CardTransaction::transactionId)
+                .returns(null, CardTransaction::settled);
     }
 
     @Test
     void should_strip_surrounding_whitespace_when_parsed_given_padded_values() {
         CardTransaction transaction = only(transaction("transactionId", "\n  28 ", "deviceId", " 00203O999999 1 "));
 
-        assertThat(transaction.transactionId()).isEqualTo(28L);
-        assertThat(transaction.deviceId()).isEqualTo("00203O999999 1");
+        assertThat(transaction)
+                .returns(28L, CardTransaction::transactionId)
+                .returns("00203O999999 1", CardTransaction::deviceId);
     }
 
     @Test
@@ -186,14 +197,19 @@ class MerchantStatementParserTest {
     void should_read_calendar_day_when_parsed_given_date_with_or_without_offset(String date) {
         CardTransaction transaction = only(transaction("date", date, "settlementDate", date));
 
-        assertThat(transaction.date()).isEqualTo(LocalDate.of(2012, 7, 19));
-        assertThat(transaction.settlementDate()).isEqualTo(LocalDate.of(2012, 7, 19));
+        assertThat(transaction)
+                .returns(LocalDate.of(2012, 7, 19), CardTransaction::date)
+                .returns(LocalDate.of(2012, 7, 19), CardTransaction::settlementDate);
     }
 
     @ParameterizedTest
     @CsvSource({
             "2012-07-16T11:28:12, 2012-07-16T11:28:12+02:00",
-            "2026-01-04T10:00, 2026-01-04T10:00+01:00"
+            "2026-01-04T10:00, 2026-01-04T10:00+01:00",
+            "2012-03-25T01:59:59, 2012-03-25T01:59:59+01:00",
+            "2012-03-25T02:30, 2012-03-25T03:30+02:00",
+            "2012-10-28T02:30, 2012-10-28T02:30+02:00",
+            "2012-10-28T03:00, 2012-10-28T03:00+01:00"
     })
     void should_take_prague_offset_when_parsed_given_transaction_time_without_offset(String time, String expected) {
         CardTransaction transaction = only(transaction("transactionDateTime", time));
@@ -215,6 +231,9 @@ class MerchantStatementParserTest {
             "date, 19.07.2012, a date",
             "settlementDate, 2012-13-01, a date",
             "amount, '4 700', a decimal number",
+            "amount, 1e3, a decimal number",
+            "amount, 0x10, a decimal number",
+            "totalFees, NaN, a decimal number",
             "totalFees, '20,00', a decimal number",
             "fioFee, five, a decimal number",
             "interchangeFee, 5.0.0, a decimal number",
@@ -382,6 +401,88 @@ class MerchantStatementParserTest {
         assertThatThrownBy(() -> parser.parse(body))
                 .isInstanceOf(MalformedResponseException.class)
                 .hasMessage("The body nests elements deeper than a merchant statement does");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"+1.5, 1.5", ".5, 0.5", "5., 5", "-0.25, -0.25"})
+    void should_read_amount_when_parsed_given_decimal_in_any_form_the_schema_allows(String text, String expected) {
+        assertThat(only(transaction("amount", text)).amount()).isEqualTo(Money.czk(expected));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"})
+    void should_read_the_same_days_and_times_when_parsed_given_another_default_time_zone(String defaultZone) {
+        TimeZone original = TimeZone.getDefault();
+        CardTransaction transaction;
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(defaultZone));
+            transaction = only(transaction("date", "2012-07-19", "transactionDateTime", "2012-07-16T23:28:12"));
+        } finally {
+            TimeZone.setDefault(original);
+        }
+
+        assertThat(transaction)
+                .returns(LocalDate.of(2012, 7, 19), CardTransaction::date)
+                .returns(OffsetDateTime.parse("2012-07-16T23:28:12+02:00"), CardTransaction::transactionDateTime);
+    }
+
+    static Stream<Arguments> encodedDocumentationExamples() {
+        String body = Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE);
+        return Stream.of(
+                Arguments.of("windows-1250 declared", declared("windows-1250", body).getBytes(Charset.forName("windows-1250"))),
+                Arguments.of("ISO-8859-2 declared", declared("ISO-8859-2", body).getBytes(Charset.forName("ISO-8859-2"))),
+                Arguments.of("UTF-8 with a byte order mark", withUtf8Mark(body.getBytes(StandardCharsets.UTF_8))),
+                Arguments.of("UTF-8 declared with a byte order mark",
+                        withUtf8Mark(declared("UTF-8", body).getBytes(StandardCharsets.UTF_8))),
+                Arguments.of("UTF-16 declared with a byte order mark", declared("UTF-16", body).getBytes(StandardCharsets.UTF_16)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("encodedDocumentationExamples")
+    void should_read_czech_text_when_parsed_given_body_in_the_encoding_its_declaration_or_mark_names(String encoding, byte[] body) {
+        CardTransaction transaction = parser.parse(body).transactions().get(0);
+
+        assertThat(transaction.note()).isEqualTo("Zaúčtování POS terminálů MasterCard, Operace ON-US");
+    }
+
+    @Test
+    void should_reject_when_parsed_given_windows_1250_body_without_declaration() {
+        byte[] body = Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE).getBytes(Charset.forName("windows-1250"));
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body is not well-formed XML");
+    }
+
+    @Test
+    void should_reject_when_parsed_given_declaration_of_unknown_encoding() {
+        String body = declared("x-no-such-charset", Fixtures.read(MERCHANT_DOCUMENTATION_EXAMPLE));
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body is not well-formed XML");
+    }
+
+    @Test
+    void should_reject_without_exhausting_the_stack_when_parsed_given_two_hundred_thousand_nested_elements() {
+        String body = "<MerchantStatement>" + "<x>".repeat(200_000) + "</x>".repeat(200_000) + "</MerchantStatement>";
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body nests elements deeper than a merchant statement does");
+    }
+
+    private static String declared(String encoding, String body) {
+        return "<?xml version=\"1.0\" encoding=\"" + encoding + "\"?>\n" + body;
+    }
+
+    private static byte[] withUtf8Mark(byte[] body) {
+        byte[] marked = new byte[body.length + 3];
+        marked[0] = (byte) 0xEF;
+        marked[1] = (byte) 0xBB;
+        marked[2] = (byte) 0xBF;
+        System.arraycopy(body, 0, marked, 3, body.length);
+        return marked;
     }
 
     private CardTransaction only(String transaction) {

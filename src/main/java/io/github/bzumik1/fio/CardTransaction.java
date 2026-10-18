@@ -87,9 +87,22 @@ public record CardTransaction(
      * @param settled whether booked
      * @param settlementDate the booking day
      * @param variableSymbol the variable symbol
+     * @throws IllegalArgumentException when a fee is in another currency than the amount
      */
     public CardTransaction {
         requireNonNull(date, "date");
         requireNonNull(amount, "amount");
+        requireCurrencyOf(amount, totalFees, "total fees");
+        requireCurrencyOf(amount, fioFee, "Fio fee");
+        requireCurrencyOf(amount, interchangeFee, "interchange fee");
+        requireCurrencyOf(amount, cardAssociationFee, "card association fee");
+        requireCurrencyOf(amount, flexibleCommission, "flexible commission");
+    }
+
+    private static void requireCurrencyOf(Money amount, @Nullable Money fee, String name) {
+        if (fee != null && !fee.currency().equals(amount.currency())) {
+            throw new IllegalArgumentException(
+                    "The " + name + " is in " + fee.currency() + ", not in the account's " + amount.currency());
+        }
     }
 }

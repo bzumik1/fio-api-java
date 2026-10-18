@@ -21,6 +21,7 @@ record RawValue(String label, @Nullable String text) {
     private static final ZoneId BANK_TIME_ZONE = ZoneId.of("Europe/Prague");
     private static final Pattern DATE_WITH_OPTIONAL_OFFSET = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})(Z|[+-]\\d{2}:?\\d{2})?");
     private static final Pattern EPOCH_MILLISECONDS = Pattern.compile("-?\\d{1,18}");
+    private static final Pattern DECIMAL = Pattern.compile("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)");
 
     @Nullable String optionalText() {
         return text == null || text.isBlank() ? null : text;
@@ -35,12 +36,12 @@ record RawValue(String label, @Nullable String text) {
     }
 
     BigDecimal requiredDecimal() {
-        return converted(requiredText(), BigDecimal::new, "a decimal number");
+        return converted(requiredText(), RawValue::toDecimal, "a decimal number");
     }
 
     @Nullable BigDecimal optionalDecimal() {
         String value = optionalText();
-        return value == null ? null : converted(value, BigDecimal::new, "a decimal number");
+        return value == null ? null : converted(value, RawValue::toDecimal, "a decimal number");
     }
 
     long requiredLong() {
@@ -78,6 +79,13 @@ record RawValue(String label, @Nullable String text) {
     @Nullable Boolean optionalBoolean() {
         String value = optionalText();
         return value == null ? null : converted(value, RawValue::toBoolean, "true or false");
+    }
+
+    static BigDecimal toDecimal(String value) {
+        if (!DECIMAL.matcher(value).matches()) {
+            throw new NumberFormatException("Not a plain decimal number");
+        }
+        return new BigDecimal(value);
     }
 
     private static LocalDate toDate(String value) {

@@ -12,7 +12,7 @@ import static io.github.bzumik1.fio.PaymentText.required;
  * @param name the name, up to 35 characters
  * @param street the street of the address, up to 35 characters
  * @param city the city of the address, up to 35 characters
- * @param country the ISO 3166 country code, such as {@code AT}
+ * @param country the two-letter country code, such as {@code AT}, from the list of Fio's import schema
  */
 public record Beneficiary(String name, @Nullable String street, @Nullable String city, @Nullable String country) {
 
@@ -23,7 +23,8 @@ public record Beneficiary(String name, @Nullable String street, @Nullable String
      * @param street the street
      * @param city the city
      * @param country the country code
-     * @throws IllegalArgumentException when a text is too long or the country is not a code
+     * @throws IllegalArgumentException when a text is too long or holds a character XML cannot carry, or the
+     *         country is not a code of Fio's list
      */
     public Beneficiary {
         name = required(name, 35, "beneficiary's name");

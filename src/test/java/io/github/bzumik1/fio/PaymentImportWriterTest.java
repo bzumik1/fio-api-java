@@ -1,11 +1,14 @@
 package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,6 +27,8 @@ class PaymentImportWriterTest {
             + "<Import xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
             + " xsi:noNamespaceSchemaLocation=\"http://www.fio.cz/schema/importIB.xsd\"><Orders>";
     private static final String EPILOG = "</Orders></Import>";
+
+    private static final LocalDate EXAMPLE_DATE = LocalDate.of(2013, 4, 25);
 
     private final PaymentImportWriter writer = new PaymentImportWriter();
 
@@ -155,12 +160,12 @@ class PaymentImportWriterTest {
 
         String xml = written(foreign(), firstDomestic, euro(), secondDomestic);
 
-        assertThat(xml).containsSubsequence(
-                "<DomesticTransaction>", "<date>", "</DomesticTransaction>",
-                "<DomesticTransaction>", "<vs>2</vs>", "</DomesticTransaction>",
-                "<T2Transaction>", "</T2Transaction>",
-                "<ForeignTransaction>", "</ForeignTransaction>");
-        assertThat(xml.indexOf("<vs>")).isGreaterThan(xml.indexOf("</DomesticTransaction>"));
+        assertThat(xml).isEqualTo(PROLOG + order(firstDomestic) + order(secondDomestic) + order(euro()) + order(foreign()) + EPILOG);
+    }
+
+    private String order(PaymentOrder order) {
+        String file = written(order);
+        return file.substring(PROLOG.length(), file.length() - EPILOG.length());
     }
 
     @Test
@@ -170,12 +175,11 @@ class PaymentImportWriterTest {
         assertThat(PaymentImportWriter.fileOrder(orders)).containsExactly(2, 4, 1, 5, 0, 3);
     }
 
-    @Test
-    void should_write_amount_with_two_decimals_when_written_given_amount_of_other_scale() {
-        assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk(new BigDecimal("1E+3"))).build()))
-                .contains("<amount>1000.00</amount>");
-        assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk("0.500")).build()))
-                .contains("<amount>0.50</amount>");
+    @ParameterizedTest
+    @CsvSource({"1E+3, 1000.00", "0.500, 0.50", "7, 7.00", "9999999999999999.99, 9999999999999999.99"})
+    void should_write_amount_with_two_decimals_when_written_given_amount_of_other_scale(BigDecimal amount, String written) {
+        assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk(amount)).build()))
+                .contains("<amount>" + written + "</amount>");
     }
 
     @Test
@@ -189,6 +193,70 @@ class PaymentImportWriterTest {
         byte[] file = writer.write(List.of(fullDomestic()));
 
         assertThat(file).containsSequence("Hračky".getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void should_write_the_documentation_example_with_a_checksum_valid_recipient_when_written_given_its_domestic_order_whose_recipient_fails_modulo_11() {
+        DomesticPayment order = DomesticPayment.builder()
+                .from("1234562")
+                .to("19-2000145399/0800")
+                .amount(Money.czk("100.00"))
+                .constantSymbol("0558")
+                .variableSymbol("1234567890")
+                .specificSymbol("1234567890")
+                .date(EXAMPLE_DATE)
+                .messageForRecipient("Hračky pro děti v PENNY\nMARKET")
+                .type(DomesticPayment.Type.STANDARD)
+                .build();
+        List<String> expected = ImportSchema.nonEmptyLeaves(FixtureBytes.read(FixtureBytes.DOMESTIC_PAYMENT_EXAMPLE)).stream()
+                .map(leaf -> leaf.replace("accountTo=2212-2000000699", "accountTo=19-2000145399").replace("bankCode=0300", "bankCode=0800"))
+                .collect(Collectors.toList());
+
+        assertThat(ImportSchema.nonEmptyLeaves(writer.write(List.of(order)))).containsExactlyElementsOf(expected);
+    }
+
+    @Test
+    void should_fail_the_modulo_11_check_when_checked_given_recipient_of_the_documentation_domestic_example() {
+        assertThat(DomesticAccount.parse("2212-2000000699/0300").hasValidChecksum()).isFalse();
+    }
+
+    @Test
+    void should_write_the_documentation_example_when_written_given_its_euro_order() {
+        EuroPayment order = EuroPayment.builder()
+                .from("1234562")
+                .to("AT611904300234573201")
+                .amount(Money.of("100.00", "EUR"))
+                .constantSymbol("0558")
+                .variableSymbol("1234567890")
+                .specificSymbol("1234567890")
+                .bic("ABAGATWWXXX")
+                .date(EXAMPLE_DATE)
+                .comment("Erste Zahlung")
+                .beneficiary(new Beneficiary("Hans Gruber", "Gugitzgasse 2", "Wien", "AT"))
+                .type(EuroPayment.Type.STANDARD)
+                .build();
+
+        assertThat(ImportSchema.nonEmptyLeaves(writer.write(List.of(order))))
+                .containsExactlyElementsOf(ImportSchema.nonEmptyLeaves(FixtureBytes.read(FixtureBytes.EURO_PAYMENT_EXAMPLE)));
+    }
+
+    @Test
+    void should_write_the_documentation_example_when_written_given_its_foreign_order() {
+        ForeignPayment order = ForeignPayment.builder()
+                .from("1234562")
+                .to("PK36SCBL0000001123456702")
+                .bic("ALFHPKKAXXX")
+                .amount(Money.of("100.00", "USD"))
+                .date(EXAMPLE_DATE)
+                .comment("Payment a0315")
+                .beneficiary(new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK"))
+                .remittanceInfo("Payment for hotel 032013")
+                .charges(ForeignPayment.Charges.BENEFICIARY)
+                .paymentReason("348")
+                .build();
+
+        assertThat(ImportSchema.nonEmptyLeaves(writer.write(List.of(order))))
+                .containsExactlyElementsOf(ImportSchema.nonEmptyLeaves(FixtureBytes.read(FixtureBytes.FOREIGN_PAYMENT_EXAMPLE)));
     }
 
     @Test

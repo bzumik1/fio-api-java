@@ -24,7 +24,7 @@ import static java.util.Objects.requireNonNull;
  * @param beneficiary the holder of the recipient's account, with the full address
  * @param remittanceInfo one to four lines of 35 characters for the recipient
  * @param charges who pays the fees
- * @param paymentReason the three-digit payment reason code
+ * @param paymentReason the payment reason code from Fio's list, such as {@code 348}
  */
 public record ForeignPayment(
         DomesticAccount from,
@@ -54,16 +54,17 @@ public record ForeignPayment(
      * @param charges who pays the fees
      * @param paymentReason the payment reason
      * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
-     *         or has more than two decimal places, the BIC is malformed, a text is too long or blank,
-     *         the beneficiary's address is incomplete, there is no remittance line or more than four, or the
-     *         payment reason is not three digits
+     *         or has more than two decimal places or sixteen digits before them, the BIC is malformed, the due
+     *         date's year is not four digits, a text is too long, blank or holds a character XML cannot carry, the
+     *         beneficiary's address is incomplete, there is no remittance line or more than four, or the payment
+     *         reason is not a code of Fio's list
      */
     public ForeignPayment {
         from = payerAccount(from);
         to = new ForeignAccount(required(requireNonNull(to, "to").identifier().replace(" ", ""), 34, "recipient's account"));
         bic = PaymentText.bic(bic);
         amount = positive(amount);
-        requireNonNull(date, "date");
+        date = PaymentText.dueDate(date);
         comment = optional(comment, 140, "comment");
         requireNonNull(beneficiary, "beneficiary");
         if (!beneficiary.hasFullAddress()) {
@@ -74,7 +75,7 @@ public record ForeignPayment(
             throw new IllegalArgumentException("A payment outside SEPA needs at least one remittance line");
         }
         requireNonNull(charges, "charges");
-        paymentReason = requireNonNull(PaymentText.digits(requireNonNull(paymentReason, "paymentReason"), 3, "payment reason"));
+        paymentReason = requireNonNull(PaymentText.paymentReason(requireNonNull(paymentReason, "paymentReason")));
     }
 
     /**
@@ -256,7 +257,7 @@ public record ForeignPayment(
         /**
          * Sets the payment reason code.
          *
-         * @param paymentReason three digits, as listed in Fio's documentation
+         * @param paymentReason a three-digit code from the list in Fio's documentation and import schema
          * @return this builder
          */
         public Builder paymentReason(String paymentReason) {

@@ -2,28 +2,35 @@ package io.github.bzumik1.fio;
 
 import io.github.bzumik1.fio.ImportResult.Message;
 import io.github.bzumik1.fio.ImportResult.Status;
+import io.github.bzumik1.fio.ImportResult.Sum;
 import io.github.bzumik1.fio.StubFioServer.RecordedBody;
 import io.github.bzumik1.fio.StubFioServer.RecordedRequest;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.PaymentSamples.DUE;
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
-import static io.github.bzumik1.fio.PaymentSamples.foreign;
 import static io.github.bzumik1.fio.PaymentSamples.fullDomestic;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -38,6 +45,24 @@ class HttpPaymentsTest {
     private static final FioToken TOKEN = FioToken.of(SECRET);
     private static final String XML = "application/xml;charset=UTF-8";
     private static final RecordedRequest IMPORT_REQUEST = new RecordedRequest("POST", "/v1/rest/import/", "application/xml");
+    private static final String FILE_START = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            + "<Import xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+            + " xsi:noNamespaceSchemaLocation=\"http://www.fio.cz/schema/importIB.xsd\"><Orders>";
+    private static final String FILE_END = "</Orders></Import>";
+    private static final String MINIMAL_DOMESTIC = "<DomesticTransaction><accountFrom>1234562</accountFrom><currency>CZK</currency>"
+            + "<amount>100.00</amount><accountTo>19-2000145399</accountTo><bankCode>0800</bankCode><date>2026-10-20</date>"
+            + "<paymentType>431001</paymentType></DomesticTransaction>";
+    private static final String MINIMAL_EURO = "<T2Transaction><accountFrom>1234562</accountFrom><currency>EUR</currency>"
+            + "<amount>100.00</amount><accountTo>AT611904300234573201</accountTo><date>2026-10-20</date>"
+            + "<benefName>Hans Gruber</benefName><paymentType>431008</paymentType></T2Transaction>";
+    private static final String MINIMAL_FOREIGN = "<ForeignTransaction><accountFrom>1234562</accountFrom><currency>USD</currency>"
+            + "<amount>100.00</amount><accountTo>PK36SCBL0000001123456702</accountTo><bic>ALFHPKKAXXX</bic>"
+            + "<date>2026-10-20</date><benefName>Amir Khan</benefName><benefStreet>Nishtar Rd 13</benefStreet>"
+            + "<benefCity>Karachi</benefCity><benefCountry>PK</benefCountry>"
+            + "<remittanceInfo1>Payment for hotel 032013</remittanceInfo1><detailsOfCharges>470503</detailsOfCharges>"
+            + "<paymentReason>348</paymentReason></ForeignTransaction>";
+    private static final ImportResult ACCEPTED = new ImportResult(0, Status.OK, 105699806L,
+            List.of(new Sum("CZK", new BigDecimal("100.00"), new BigDecimal("0"))), List.of(new Message(1, Status.OK, "OK")));
 
     private StubFioServer server;
     private FakeTime time;
@@ -107,7 +132,7 @@ class HttpPaymentsTest {
     }
 
     @Test
-    void should_post_fio_xml_with_type_token_and_language_parts_when_batch_submitted() {
+    void should_post_fio_xml_with_type_token_and_language_parts_when_batch_submitted_given_full_domestic_order() {
         answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
 
         ImportResult result = client.payments().batch()
@@ -131,11 +156,14 @@ class HttpPaymentsTest {
                 new Part("type", null, null, "xml"),
                 new Part("token", null, null, SECRET),
                 new Part("lng", null, null, "en"),
-                new Part("file", "payments.xml", "application/octet-stream",
-                        new String(new PaymentImportWriter().write(List.of(fullDomestic())), StandardCharsets.UTF_8)));
-        assertThat(result).isEqualTo(new ImportResponseParser().parse(Fixtures.read(Fixtures.IMPORT_ACCEPTED)));
-        assertThat(result.isAccepted()).isTrue();
-        assertThat(result.instructionId()).isEqualTo(105699806L);
+                new Part("file", "payments.xml", "application/octet-stream", FILE_START
+                        + "<DomesticTransaction><accountFrom>1234562</accountFrom><currency>CZK</currency><amount>100.00</amount>"
+                        + "<accountTo>19-2000145399</accountTo><bankCode>0800</bankCode><ks>0558</ks><vs>1234567890</vs>"
+                        + "<ss>0000000002</ss><date>2026-10-20</date>"
+                        + "<messageForRecipient>Hračky pro děti v PENNY MARKET</messageForRecipient>"
+                        + "<comment>Dárky &amp; &lt;hračky&gt;</comment><paymentReason>110</paymentReason>"
+                        + "<paymentType>431005</paymentType></DomesticTransaction>" + FILE_END));
+        assertThat(result).isEqualTo(ACCEPTED);
     }
 
     @Test
@@ -161,14 +189,78 @@ class HttpPaymentsTest {
                         .beneficiary("Hans Gruber"))
                 .submit();
 
-        assertThat(fileOf(server.bodies().get(0))).isEqualTo(
-                new String(new PaymentImportWriter().write(List.of(domestic(), euro(), foreign())), StandardCharsets.UTF_8));
-        assertThat(result.messages()).containsExactly(
+        assertThat(fileOf(server.bodies().get(0))).isEqualTo(FILE_START + MINIMAL_DOMESTIC + MINIMAL_EURO + MINIMAL_FOREIGN + FILE_END);
+        assertThat(result).isEqualTo(new ImportResult(0, Status.OK, 9L, List.of(), List.of(
                 new Message(null, null, "Dávka přijata"),
                 new Message(2, Status.OK, "tuzemská"),
                 new Message(3, Status.OK, "europlatba"),
-                new Message(1, Status.OK, "zahraniční"));
-        assertThat(result.instructionId()).isEqualTo(9L);
+                new Message(1, Status.OK, "zahraniční"))));
+    }
+
+    @Test
+    void should_number_the_last_order_when_submitted_given_detail_id_equal_to_the_batch_size() {
+        answer(200, details(detail(2, "druhá v souboru")));
+
+        ImportResult result = client.payments().batch().add(euro()).add(domestic()).submit();
+
+        assertThat(result.messages()).containsExactly(
+                new Message(null, null, "Dávka přijata"), new Message(1, Status.OK, "druhá v souboru"));
+    }
+
+    @Test
+    void should_leave_every_order_number_empty_when_submitted_given_detail_id_beyond_the_batch_size() {
+        answer(200, details(detail(1, "první"), detail(3, "mimo dávku")));
+
+        ImportResult result = client.payments().batch().add(domestic()).add(euro()).submit();
+
+        assertThat(result.messages()).containsExactly(
+                new Message(null, null, "Dávka přijata"),
+                new Message(null, Status.OK, "první"),
+                new Message(null, Status.OK, "mimo dávku"));
+    }
+
+    @Test
+    void should_leave_every_order_number_empty_when_submitted_given_negative_detail_id() {
+        answer(200, details(detail(-1, "záporná"), detail(1, "první")));
+
+        ImportResult result = client.payments().batch().add(domestic()).submit();
+
+        assertThat(result.messages()).extracting(Message::orderNumber).containsOnlyNulls();
+    }
+
+    @Test
+    void should_keep_detail_without_id_unnumbered_and_number_the_others_when_submitted_given_mixed_details() {
+        answer(200, details("<detail><messages><message status=\"warning\">bez čísla</message></messages></detail>",
+                detail(1, "první")));
+
+        ImportResult result = client.payments().batch().add(euro()).add(domestic()).submit();
+
+        assertThat(result.messages()).containsExactly(
+                new Message(null, null, "Dávka přijata"),
+                new Message(null, Status.WARNING, "bez čísla"),
+                new Message(2, Status.OK, "první"));
+    }
+
+    @Test
+    void should_read_czech_messages_when_submitted_given_answer_served_in_windows_1250() {
+        String refused = Fixtures.read(Fixtures.IMPORT_REFUSED).replace("encoding=\"UTF-8\"", "encoding=\"windows-1250\"");
+        server.respondWith(200, "application/xml;charset=windows-1250", refused.getBytes(Charset.forName("windows-1250")));
+
+        ImportResult result = client.payments().submit(PaymentBatch.of(domestic(), domestic()));
+
+        assertThat(result.messages()).extracting(Message::text).containsExactly(
+                "Nalezené chyby při kontrole příkazů", "OK", "Neplatný kód banky příjemce.", "Měna platby neodpovídá měně účtu.");
+    }
+
+    @Test
+    void should_refuse_a_second_submission_without_request_when_submitted_twice_given_submitted_batch() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient.BatchRequest batch = client.payments().batch().add(domestic());
+        batch.submit();
+
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessage("The batch was already submitted; build a new one to submit again");
+        assertThat(server.requests()).containsExactly(IMPORT_REQUEST);
     }
 
     @Test
@@ -188,7 +280,7 @@ class HttpPaymentsTest {
 
         ImportResult result = client.payments().submit(PaymentBatch.of(euro(), domestic()));
 
-        assertThat(fileOf(server.bodies().get(0))).containsSubsequence("<DomesticTransaction>", "<T2Transaction>");
+        assertThat(fileOf(server.bodies().get(0))).isEqualTo(FILE_START + MINIMAL_DOMESTIC + MINIMAL_EURO + FILE_END);
         assertThat(result.messages()).extracting(Message::orderNumber).containsExactly(null, 2, 1);
     }
 
@@ -203,7 +295,7 @@ class HttpPaymentsTest {
     }
 
     @Test
-    void should_upload_file_unchanged_with_its_type_and_keep_file_positions_when_uploaded() {
+    void should_upload_file_unchanged_with_its_type_and_keep_file_positions_when_uploaded_given_abo_file() {
         answer(200, details(detail(1, "první"), detail(7, "sedmá")));
         byte[] abo = "UHL1201012Novak Jan           1234567890001999\r\n".getBytes(StandardCharsets.US_ASCII);
 
@@ -237,10 +329,13 @@ class HttpPaymentsTest {
 
         ImportResult result = client.payments().submit(PaymentBatch.of(domestic(), domestic()));
 
-        assertThat(result.status()).isEqualTo(Status.ERROR);
-        assertThat(result.isAccepted()).isFalse();
-        assertThat(result.errorCode()).isEqualTo(1);
-        assertThat(result.messages()).contains(new Message(2, Status.ERROR, "Neplatný kód banky příjemce."));
+        assertThat(result).isEqualTo(new ImportResult(1, Status.ERROR, null,
+                List.of(new Sum("CZK", new BigDecimal("350.50"), new BigDecimal("0")),
+                        new Sum("EUR", new BigDecimal("12.00"), new BigDecimal("0"))),
+                List.of(new Message(null, null, "Nalezené chyby při kontrole příkazů"),
+                        new Message(1, Status.OK, "OK"),
+                        new Message(2, Status.ERROR, "Neplatný kód banky příjemce."),
+                        new Message(2, Status.WARNING, "Měna platby neodpovídá měně účtu."))));
     }
 
     @Test
@@ -252,30 +347,48 @@ class HttpPaymentsTest {
         assertThat(server.requests()).isEmpty();
     }
 
-    @Test
-    void should_reject_without_request_when_order_added_given_incomplete_or_missing_order() {
+    static Stream<Arguments> incompleteOrders() {
+        return Stream.of(
+                Arguments.of("domestic", (Consumer<FioClient.BatchRequest>) batch -> batch.domestic(order -> order.from("1234562"))),
+                Arguments.of("euro", (Consumer<FioClient.BatchRequest>) batch -> batch.euro(order -> order.from("1234562"))),
+                Arguments.of("foreign", (Consumer<FioClient.BatchRequest>) batch -> batch.foreign(order -> order.from("1234562"))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("incompleteOrders")
+    void should_reject_without_request_when_order_added_given_order_without_recipient(
+            String kind, Consumer<FioClient.BatchRequest> addition) {
         FioClient.BatchRequest batch = client.payments().batch();
 
-        assertThatIllegalStateException().isThrownBy(() -> batch.domestic(order -> order.from("1234562")))
+        assertThatIllegalStateException().isThrownBy(() -> addition.accept(batch))
                 .withMessage("The recipient's account is required");
-        assertThatIllegalStateException().isThrownBy(() -> batch.euro(order -> order.from("1234562")))
-                .withMessage("The recipient's account is required");
-        assertThatIllegalStateException().isThrownBy(() -> batch.foreign(order -> order.from("1234562")))
-                .withMessage("The recipient's account is required");
-        assertThatNullPointerException().isThrownBy(() -> batch.domestic(null)).withMessage("order");
-        assertThatNullPointerException().isThrownBy(() -> batch.add(null)).withMessage("order");
-        assertThatNullPointerException().isThrownBy(() -> client.payments().submit(null)).withMessage("batch");
-        assertThatNullPointerException().isThrownBy(() -> client.payments().upload(null)).withMessage("file");
-        assertThatIllegalStateException().isThrownBy(batch::submit);
+        assertThatIllegalStateException().isThrownBy(batch::submit).withMessage("The batch holds no payment order to submit");
+        assertThat(server.requests()).isEmpty();
+    }
+
+    static Stream<Arguments> missingArguments() {
+        return Stream.of(
+                Arguments.of("order", (Consumer<FioClient>) fio -> fio.payments().batch().domestic(null)),
+                Arguments.of("order", (Consumer<FioClient>) fio -> fio.payments().batch().euro(null)),
+                Arguments.of("order", (Consumer<FioClient>) fio -> fio.payments().batch().foreign(null)),
+                Arguments.of("order", (Consumer<FioClient>) fio -> fio.payments().batch().add(null)),
+                Arguments.of("batch", (Consumer<FioClient>) fio -> fio.payments().submit(null)),
+                Arguments.of("file", (Consumer<FioClient>) fio -> fio.payments().upload(null)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingArguments")
+    void should_reject_naming_the_argument_without_request_when_called_given_null(String argument, Consumer<FioClient> call) {
+        assertThatNullPointerException().isThrownBy(() -> call.accept(client)).withMessage(argument);
         assertThat(server.requests()).isEmpty();
     }
 
     @Test
-    void should_start_empty_batch_each_time_when_batch_started() {
-        FioClient.BatchRequest first = client.payments().batch().add(domestic());
+    void should_start_an_empty_batch_when_batch_started_given_orders_added_to_another_batch() {
+        client.payments().batch().add(domestic());
 
-        assertThat(client.payments().batch()).isNotSameAs(first);
-        assertThatIllegalStateException().isThrownBy(() -> client.payments().batch().submit());
+        assertThatIllegalStateException().isThrownBy(() -> client.payments().batch().submit())
+                .withMessage("The batch holds no payment order to submit");
     }
 
     @Test
@@ -310,8 +423,12 @@ class HttpPaymentsTest {
     void should_raise_authorization_failure_when_submitted_given_inactive_token() {
         answer(500, "");
 
-        assertThat(catchThrowableOfType(FioAuthorizationException.class,
-                () -> client.payments().submit(PaymentBatch.of(domestic())))).isNotNull();
+        FioAuthorizationException failure = catchThrowableOfType(FioAuthorizationException.class,
+                () -> client.payments().submit(PaymentBatch.of(domestic())));
+
+        assertThat(failure).hasMessage("Fio API request POST " + server.baseUri()
+                + "/import/ was refused with HTTP 500: the token does not exist, has expired or is not active");
+        assertThat(failure.statusCode()).hasValue(500);
     }
 
     @Test
@@ -335,7 +452,7 @@ class HttpPaymentsTest {
 
         ImportResult result = client.payments().submit(PaymentBatch.of(domestic()));
 
-        assertThat(result.isAccepted()).isTrue();
+        assertThat(result).isEqualTo(ACCEPTED);
         assertThat(server.requests()).containsExactly(IMPORT_REQUEST, IMPORT_REQUEST);
         assertThat(fileOf(server.bodies().get(1))).isEqualTo(fileOf(server.bodies().get(0)));
         assertThat(time.sleeps()).containsExactly(Duration.ofSeconds(30));

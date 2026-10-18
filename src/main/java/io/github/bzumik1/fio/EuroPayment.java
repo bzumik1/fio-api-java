@@ -6,7 +6,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-import static io.github.bzumik1.fio.PaymentText.digits;
 import static io.github.bzumik1.fio.PaymentText.iban;
 import static io.github.bzumik1.fio.PaymentText.optional;
 import static io.github.bzumik1.fio.PaymentText.payerAccount;
@@ -26,7 +25,7 @@ import static java.util.Objects.requireNonNull;
  * @param comment the payer's own label, up to 140 characters
  * @param beneficiary the holder of the recipient's account
  * @param remittanceInfo up to three lines of 35 characters for the recipient
- * @param paymentReason the three-digit payment reason code, needed only for some recipients in Slovakia
+ * @param paymentReason the payment reason code from Fio's list, needed only for some recipients in Slovakia
  * @param type standard, priority or instant
  */
 public record EuroPayment(
@@ -59,8 +58,9 @@ public record EuroPayment(
      * @param paymentReason the payment reason
      * @param type the type
      * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
-     *         euro with at most two decimal places, the IBAN or BIC is malformed, a text is too long or blank, there
-     *         are more than three remittance lines or the payment reason is not three digits
+     *         euro with at most two decimal places and sixteen digits before them, the IBAN or BIC is malformed, the
+     *         due date's year is not four digits, a text is too long, blank or holds a character XML cannot carry,
+     *         there are more than three remittance lines or the payment reason is not a code of Fio's list
      */
     public EuroPayment {
         from = payerAccount(from);
@@ -71,11 +71,11 @@ public record EuroPayment(
             throw new IllegalArgumentException("A SEPA payment is in euro, not " + amount.currency());
         }
         requireNonNull(symbols, "symbols");
-        requireNonNull(date, "date");
+        date = PaymentText.dueDate(date);
         comment = optional(comment, 140, "comment");
         requireNonNull(beneficiary, "beneficiary");
         remittanceInfo = remittanceLines(remittanceInfo, REMITTANCE_LINES);
-        paymentReason = digits(paymentReason, 3, "payment reason");
+        paymentReason = PaymentText.paymentReason(paymentReason);
         requireNonNull(type, "type");
     }
 
@@ -306,7 +306,7 @@ public record EuroPayment(
         /**
          * Sets the payment reason code.
          *
-         * @param paymentReason three digits, as listed in Fio's documentation
+         * @param paymentReason a three-digit code from the list in Fio's documentation and import schema
          * @return this builder
          */
         public Builder paymentReason(String paymentReason) {

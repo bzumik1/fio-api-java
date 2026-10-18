@@ -7,9 +7,9 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
-import java.io.StringReader;
-import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -21,11 +21,11 @@ final class MerchantStatementParser {
     private static final String ROOT = "MerchantStatement";
     private static final int MAXIMUM_DEPTH = 16;
 
-    MerchantStatement parse(byte[] xml) {
-        return parse(new String(xml, StandardCharsets.UTF_8));
+    MerchantStatement parse(String xml) {
+        return parse(xml.getBytes(StandardCharsets.UTF_8));
     }
 
-    MerchantStatement parse(String xml) {
+    MerchantStatement parse(byte[] xml) {
         Element root = read(xml);
         if (!root.name().equals(ROOT)) {
             throw new MalformedResponseException("The root element is " + root.name() + ", not " + ROOT);
@@ -103,9 +103,9 @@ final class MerchantStatementParser {
         return value == null ? null : new Money(value, currency.requiredCurrency());
     }
 
-    private static Element read(String xml) {
+    private static Element read(byte[] xml) {
         try {
-            XMLStreamReader reader = secureFactory().createXMLStreamReader(new StringReader(xml));
+            XMLStreamReader reader = secureFactory().createXMLStreamReader(new ByteArrayInputStream(xml));
             int event = reader.next();
             while (event != XMLStreamConstants.START_ELEMENT) {
                 if (event == XMLStreamConstants.DTD) {

@@ -2,10 +2,16 @@ package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.PaymentSamples.DUE;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
@@ -35,15 +41,14 @@ class EuroPaymentTest {
 
     @Test
     void should_default_to_standard_order_without_optional_parts_when_built_given_required_parts_only() {
-        EuroPayment payment = PaymentSamples.euro();
-
-        assertThat(payment.type()).isEqualTo(EuroPayment.Type.STANDARD);
-        assertThat(payment.bic()).isNull();
-        assertThat(payment.comment()).isNull();
-        assertThat(payment.remittanceInfo()).isEmpty();
-        assertThat(payment.paymentReason()).isNull();
-        assertThat(payment.beneficiary()).isEqualTo(Beneficiary.named("Hans Gruber"));
-        assertThat(payment.symbols()).isEqualTo(PaymentSymbols.none());
+        assertThat(PaymentSamples.euro())
+                .returns(EuroPayment.Type.STANDARD, EuroPayment::type)
+                .returns(null, EuroPayment::bic)
+                .returns(null, EuroPayment::comment)
+                .returns(List.of(), EuroPayment::remittanceInfo)
+                .returns(null, EuroPayment::paymentReason)
+                .returns(Beneficiary.named("Hans Gruber"), EuroPayment::beneficiary)
+                .returns(PaymentSymbols.none(), EuroPayment::symbols);
     }
 
     @Test
@@ -54,8 +59,9 @@ class EuroPaymentTest {
                 .bic(" abagatww ")
                 .build();
 
-        assertThat(payment.to()).isEqualTo(new ForeignAccount("AT611904300234573201"));
-        assertThat(payment.bic()).isEqualTo("ABAGATWW");
+        assertThat(payment)
+                .returns(new ForeignAccount("AT611904300234573201"), EuroPayment::to)
+                .returns("ABAGATWW", EuroPayment::bic);
     }
 
     @ParameterizedTest
@@ -64,22 +70,22 @@ class EuroPaymentTest {
         assertThat(type.code()).isEqualTo(code);
     }
 
-    @Test
-    void should_name_missing_part_when_built_given_incomplete_order() {
-        assertThatIllegalStateException().isThrownBy(() -> EuroPayment.builder().build())
-                .withMessage("The payer's account is required");
-        assertThatIllegalStateException().isThrownBy(() -> EuroPayment.builder().from("1234562").build())
-                .withMessage("The recipient's account is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> EuroPayment.builder().from("1234562").to("AT611904300234573201").build())
-                .withMessage("The amount is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> EuroPayment.builder().from("1234562").to("AT611904300234573201").amount(euro("1")).build())
-                .withMessage("The date is required");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> EuroPayment.builder().from("1234562").to("AT611904300234573201").amount(euro("1"))
-                        .date(DUE).build())
-                .withMessage("The beneficiary is required");
+    static Stream<Arguments> incompleteOrders() {
+        return Stream.of(
+                Arguments.of("payer's account", (Supplier<EuroPayment>) () -> EuroPayment.builder().build()),
+                Arguments.of("recipient's account", (Supplier<EuroPayment>) () -> EuroPayment.builder().from("1234562").build()),
+                Arguments.of("amount", (Supplier<EuroPayment>) () -> EuroPayment.builder().from("1234562")
+                        .to("AT611904300234573201").build()),
+                Arguments.of("date", (Supplier<EuroPayment>) () -> EuroPayment.builder().from("1234562")
+                        .to("AT611904300234573201").amount(euro("1")).build()),
+                Arguments.of("beneficiary", (Supplier<EuroPayment>) () -> EuroPayment.builder().from("1234562")
+                        .to("AT611904300234573201").amount(euro("1")).date(DUE).build()));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("incompleteOrders")
+    void should_name_missing_part_when_built_given_incomplete_order(String part, Supplier<EuroPayment> build) {
+        assertThatIllegalStateException().isThrownBy(build::get).withMessage("The " + part + " is required");
     }
 
     @Test
@@ -89,24 +95,59 @@ class EuroPaymentTest {
     }
 
     @Test
-    void should_reject_when_built_given_malformed_iban_bic_or_payer() {
-        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().to("2000145399/0800").build());
-        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().bic("ABAG").build());
-        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().from("19-2400222222").build());
+    void should_reject_when_built_given_czech_account_number_instead_of_iban() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().to("2000145399/0800").build())
+                .withMessage("Not an IBAN: '2000145399/0800'");
     }
 
     @Test
-    void should_accept_three_remittance_lines_of_35_characters_and_no_more_when_built() {
+    void should_reject_when_built_given_iban_with_wrong_check_digits() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().to("AT621904300234573201").build())
+                .withMessage("Not an IBAN, the check digits do not match: 'AT621904300234573201'");
+    }
+
+    @Test
+    void should_reject_when_built_given_malformed_bic() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().bic("ABAG").build())
+                .withMessage("Not a BIC: 'ABAG'");
+    }
+
+    @Test
+    void should_reject_when_built_given_payer_with_prefix() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().from("19-2400222222").build())
+                .withMessage("The payer's account is a Fio account, which has no prefix: 19-2400222222");
+    }
+
+    @Test
+    void should_reject_when_built_given_due_date_in_year_zero() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().date(LocalDate.of(0, 12, 31)).build())
+                .withMessage("A due date has a four-digit year: 0000-12-31");
+    }
+
+    @Test
+    void should_keep_three_lines_when_built_given_three_remittance_lines_of_35_characters() {
         String longest = "x".repeat(35);
 
         assertThat(euroBuilder().remittanceInfo(longest).remittanceInfo(longest).remittanceInfo(longest).build()
-                .remittanceInfo()).hasSize(3);
+                .remittanceInfo()).containsExactly(longest, longest, longest);
+    }
+
+    @Test
+    void should_reject_when_built_given_fourth_remittance_line() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> euroBuilder().remittanceInfo("1").remittanceInfo("2").remittanceInfo("3")
                         .remittanceInfo("4").build())
                 .withMessage("At most 3 remittance lines are allowed, not 4");
-        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().remittanceInfo(longest + "x").build())
+    }
+
+    @Test
+    void should_reject_when_built_given_remittance_line_longer_than_35_characters() {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().remittanceInfo("x".repeat(36)).build())
                 .withMessage("The remittance line is at most 35 characters, not 36");
+    }
+
+    @Test
+    void should_reject_when_built_given_blank_remittance_line() {
         assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().remittanceInfo(" ").build())
                 .withMessage("The remittance line is blank");
     }
@@ -124,10 +165,22 @@ class EuroPaymentTest {
     }
 
     @Test
-    void should_reject_when_built_given_comment_or_payment_reason_fio_does_not_import() {
+    void should_reject_when_built_given_comment_longer_than_fio_imports() {
         assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().comment("x".repeat(141)).build())
                 .withMessage("The comment is at most 140 characters, not 141");
-        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().paymentReason("abc").build())
-                .withMessage("The payment reason is 3 digits: 'abc'");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abc", "999", "11"})
+    void should_reject_when_built_given_payment_reason_outside_fio_list(String reason) {
+        assertThatIllegalArgumentException().isThrownBy(() -> euroBuilder().paymentReason(reason).build())
+                .withMessage("Not a payment reason code Fio imports: '" + reason + "'");
+    }
+
+    @Test
+    void should_reject_when_built_given_beneficiary_country_outside_fio_list() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> euroBuilder().beneficiary(new Beneficiary("Hans Gruber", null, null, "TCH")).build())
+                .withMessage("Not a country code Fio imports: 'TCH'");
     }
 }

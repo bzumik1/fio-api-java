@@ -11,6 +11,7 @@ import static io.github.bzumik1.fio.PaymentSamples.foreign;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PaymentBatchTest {
 
@@ -30,13 +31,24 @@ class PaymentBatchTest {
         PaymentBatch batch = new PaymentBatch(orders);
         orders.add(euro());
 
-        assertThat(batch.orders()).hasSize(1);
+        assertThat(batch.orders()).containsExactly(domestic());
     }
 
     @Test
-    void should_reject_when_created_given_no_orders_or_missing_order() {
+    void should_refuse_changes_when_orders_changed_given_created_batch() {
+        PaymentBatch batch = PaymentBatch.of(domestic());
+
+        assertThatThrownBy(() -> batch.orders().add(euro())).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void should_reject_when_created_given_no_orders() {
         assertThatIllegalArgumentException().isThrownBy(PaymentBatch::of)
                 .withMessage("A batch holds at least one payment order");
+    }
+
+    @Test
+    void should_reject_when_created_given_missing_order() {
         assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of(domestic(), null));
     }
 }

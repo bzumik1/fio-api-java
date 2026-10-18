@@ -4,7 +4,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.LocalDate;
 
-import static io.github.bzumik1.fio.PaymentText.digits;
 import static io.github.bzumik1.fio.PaymentText.optional;
 import static io.github.bzumik1.fio.PaymentText.payerAccount;
 import static io.github.bzumik1.fio.PaymentText.positive;
@@ -22,7 +21,8 @@ import static java.util.Objects.requireNonNull;
  * @param messageForRecipient the message the recipient sees, up to 140 characters
  * @param comment the payer's own label, up to 140 characters (Fio's documentation says 255, its import schema
  *        140, and the schema is what the bank validates against)
- * @param paymentReason the three-digit payment reason code, needed only for some foreign-currency transfers
+ * @param paymentReason the payment reason code from Fio's list, such as {@code 110}, needed only for some
+ *        foreign-currency transfers
  * @param type standard, priority, or a direct debit order
  */
 public record DomesticPayment(
@@ -49,8 +49,9 @@ public record DomesticPayment(
      * @param paymentReason the payment reason
      * @param type the type
      * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
-     *         or has more than two decimal places, the recipient's account has no bank code, a text is too long or
-     *         the payment reason is not three digits
+     *         or has more than two decimal places or sixteen digits before them, the recipient's account has no
+     *         bank code or fails the modulo 11 check, the due date's year is not four digits, a text is too long or
+     *         holds a character XML cannot carry, or the payment reason is not a code of Fio's list
      */
     public DomesticPayment {
         from = payerAccount(from);
@@ -63,10 +64,10 @@ public record DomesticPayment(
         }
         amount = positive(amount);
         requireNonNull(symbols, "symbols");
-        requireNonNull(date, "date");
+        date = PaymentText.dueDate(date);
         messageForRecipient = optional(messageForRecipient, 140, "message for the recipient");
         comment = optional(comment, 140, "comment");
-        paymentReason = digits(paymentReason, 3, "payment reason");
+        paymentReason = PaymentText.paymentReason(paymentReason);
         requireNonNull(type, "type");
     }
 
@@ -250,7 +251,7 @@ public record DomesticPayment(
         /**
          * Sets the payment reason code.
          *
-         * @param paymentReason three digits, as listed in Fio's documentation
+         * @param paymentReason a three-digit code from the list in Fio's documentation and import schema
          * @return this builder
          */
         public Builder paymentReason(String paymentReason) {

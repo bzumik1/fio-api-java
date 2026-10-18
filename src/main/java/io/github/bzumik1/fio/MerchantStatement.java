@@ -38,6 +38,7 @@ public record MerchantStatement(
      * @param dateStart the first day
      * @param dateEnd the last day
      * @param transactions the card transactions
+     * @throws IllegalArgumentException when a transaction's amount is in another currency than the account's
      */
     public MerchantStatement {
         requireNonNull(account, "account");
@@ -45,5 +46,11 @@ public record MerchantStatement(
         requireNonNull(bic, "bic");
         requireNonNull(currency, "currency");
         transactions = List.copyOf(transactions);
+        for (CardTransaction transaction : transactions) {
+            if (!transaction.amount().currency().equals(currency)) {
+                throw new IllegalArgumentException("The card transaction " + transaction.operationId() + " is in "
+                        + transaction.amount().currency() + ", not in the account's " + currency);
+            }
+        }
     }
 }
