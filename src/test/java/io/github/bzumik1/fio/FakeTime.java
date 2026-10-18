@@ -39,10 +39,8 @@ final class FakeTime {
 
     Sleeper sleeper() {
         return duration -> {
-            synchronized (this) {
-                sleeps.add(duration);
-                advance(duration);
-            }
+            sleeps.add(duration);
+            advance(duration);
         };
     }
 

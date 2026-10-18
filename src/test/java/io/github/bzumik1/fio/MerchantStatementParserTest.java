@@ -1,8 +1,8 @@
 package io.github.bzumik1.fio;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -42,18 +42,6 @@ class MerchantStatementParserTest {
             "amount", "10.00");
 
     private final MerchantStatementParser parser = new MerchantStatementParser();
-
-    private StubFioServer server;
-
-    @BeforeEach
-    void startServer() {
-        server = StubFioServer.start();
-    }
-
-    @AfterEach
-    void stopServer() {
-        server.close();
-    }
 
     @Test
     void should_map_info_and_every_field_when_parsed_given_documentation_example() {
@@ -382,15 +370,17 @@ class MerchantStatementParserTest {
 
     @Test
     void should_reject_without_reading_it_when_parsed_given_document_type_with_external_entity() {
-        String body = "<?xml version=\"1.0\"?><!DOCTYPE MerchantStatement SYSTEM \"" + server.baseUri() + "/schema.dtd\" ["
-                + "<!ENTITY secret SYSTEM \"file:///etc/hostname\">"
-                + "<!ENTITY remote SYSTEM \"" + server.baseUri() + "/entity\">]>"
-                + "<MerchantStatement><Info><accountId>&secret;&remote;</accountId></Info></MerchantStatement>";
+        try (StubFioServer canary = StubFioServer.start()) {
+            String body = "<?xml version=\"1.0\"?><!DOCTYPE MerchantStatement SYSTEM \"" + canary.baseUri() + "/schema.dtd\" ["
+                    + "<!ENTITY secret SYSTEM \"file:///etc/hostname\">"
+                    + "<!ENTITY remote SYSTEM \"" + canary.baseUri() + "/entity\">]>"
+                    + "<MerchantStatement><Info><accountId>&secret;&remote;</accountId></Info></MerchantStatement>";
 
-        assertThatThrownBy(() -> parser.parse(body))
-                .isInstanceOf(MalformedResponseException.class)
-                .hasMessage("The body declares a document type, which this client does not read");
-        assertThat(server.requests()).isEmpty();
+            assertThatThrownBy(() -> parser.parse(body))
+                    .isInstanceOf(MalformedResponseException.class)
+                    .hasMessage("The body declares a document type, which this client does not read");
+            assertThat(canary.requests()).isEmpty();
+        }
     }
 
     @Test
@@ -411,6 +401,7 @@ class MerchantStatementParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"})
+    @ResourceLock(Resources.TIME_ZONE)
     void should_read_the_same_days_and_times_when_parsed_given_another_default_time_zone(String defaultZone) {
         TimeZone original = TimeZone.getDefault();
         CardTransaction transaction;

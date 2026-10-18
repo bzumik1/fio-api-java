@@ -1,12 +1,13 @@
 package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -156,6 +157,7 @@ class AccountStatementParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC", "America/Los_Angeles"})
+    @ResourceLock(Resources.TIME_ZONE)
     void should_read_the_same_days_when_parsed_given_another_default_time_zone(String defaultZone) {
         TimeZone original = TimeZone.getDefault();
         AccountStatement statement;
@@ -177,14 +179,14 @@ class AccountStatementParserTest {
 
     @Test
     void should_print_statement_as_2012_slash_3_when_parsed_given_documentation_answer_for_third_statement_of_2012() {
-        AccountStatement statement = parser.parse(FixtureBytes.read(FixtureBytes.STATEMENT_2012_3));
+        AccountStatement statement = parser.parse(Fixtures.bytes(Fixtures.STATEMENT_2012_3));
 
         assertThat(statement.info().statement()).hasToString("2012/3");
     }
 
     @Test
     void should_read_statement_number_period_and_movement_when_parsed_given_documentation_answer_for_third_statement_of_2012() {
-        AccountStatement statement = parser.parse(FixtureBytes.read(FixtureBytes.STATEMENT_2012_3));
+        AccountStatement statement = parser.parse(Fixtures.bytes(Fixtures.STATEMENT_2012_3));
 
         assertThat(statement.info()).isEqualTo(new AccountInfo(
                 DomesticAccount.parse("2400222222/2010"),
@@ -207,7 +209,7 @@ class AccountStatementParserTest {
 
     @Test
     void should_read_body_when_parsed_given_utf8_byte_order_mark_before_json() {
-        byte[] json = Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8);
+        byte[] json = Fixtures.bytes(PERIODS_STATEMENT);
         byte[] withMark = new byte[json.length + 3];
         withMark[0] = (byte) 0xEF;
         withMark[1] = (byte) 0xBB;
@@ -219,7 +221,7 @@ class AccountStatementParserTest {
 
     @Test
     void should_read_czech_text_when_parsed_given_utf8_bytes() {
-        Transaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8)).transactions().get(0);
+        Transaction transaction = parser.parse(Fixtures.bytes(PERIODS_STATEMENT)).transactions().get(0);
 
         assertThat(transaction.executedBy()).isEqualTo("Béďa Trávníček");
     }

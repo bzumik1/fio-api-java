@@ -37,11 +37,11 @@ class TransportFailureTest {
 
     @Test
     void should_raise_transport_failure_that_never_reached_the_bank_when_downloading_given_connection_refused() throws IOException {
-        int closedPort;
+        int recentlyClosedPort;
         try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            closedPort = socket.getLocalPort();
+            recentlyClosedPort = socket.getLocalPort();
         }
-        FioClient offline = bank.builder().baseUri(URI.create("http://127.0.0.1:" + closedPort + "/v1/rest")).build();
+        FioClient offline = bank.builder().baseUri(URI.create("http://127.0.0.1:" + recentlyClosedPort + "/v1/rest")).build();
 
         FioTransportException failure = fetchFailure(offline);
 

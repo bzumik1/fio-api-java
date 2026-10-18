@@ -70,6 +70,23 @@ final class StubFioServer implements AutoCloseable {
         }
     }
 
+    private static final class Departure {
+
+        private final AtomicInteger inFlight;
+        private boolean left;
+
+        Departure(AtomicInteger inFlight) {
+            this.inFlight = inFlight;
+        }
+
+        void leave() {
+            if (!left) {
+                left = true;
+                inFlight.decrementAndGet();
+            }
+        }
+    }
+
     private final HttpServer server;
     private final ExecutorService executor;
     private final @Nullable FakeTime time;
@@ -209,6 +226,15 @@ final class StubFioServer implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         mostInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+        Departure departure = new Departure(inFlight);
+        try {
+            answer(exchange, departure);
+        } finally {
+            departure.leave();
+        }
+    }
+
+    private void answer(HttpExchange exchange, Departure departure) throws IOException {
         RecordedRequest request = new RecordedRequest(
                 exchange.getRequestMethod(),
                 exchange.getRequestURI().getRawPath(),
@@ -227,7 +253,6 @@ final class StubFioServer implements AutoCloseable {
         if (!answer.handlingTime().isZero()) {
             requireTime().advance(answer.handlingTime());
         }
-        inFlight.decrementAndGet();
         if (!answer.contentType().isEmpty()) {
             exchange.getResponseHeaders().set("Content-Type", answer.contentType());
         }
@@ -235,9 +260,18 @@ final class StubFioServer implements AutoCloseable {
             stall(exchange, answer);
             return;
         }
-        exchange.sendResponseHeaders(answer.status(), answer.body().length == 0 ? -1 : answer.body().length);
+        byte[] body = answer.body();
+        if (body.length == 0) {
+            departure.leave();
+            exchange.sendResponseHeaders(answer.status(), -1);
+            exchange.close();
+            return;
+        }
+        exchange.sendResponseHeaders(answer.status(), body.length);
         try (OutputStream output = exchange.getResponseBody()) {
-            output.write(answer.body());
+            output.write(body, 0, body.length - 1);
+            departure.leave();
+            output.write(body, body.length - 1, 1);
         }
     }
 

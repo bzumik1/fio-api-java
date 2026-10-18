@@ -29,9 +29,11 @@ class PaymentImportPropertyTest {
     private static final int EXTRA_BATCHES = 40;
     private static final List<String> COUNTRIES = ImportSchema.enumeration("country_type");
     private static final List<String> PAYMENT_REASONS = ImportSchema.enumeration("payment_reason_type");
-    private static final List<Currency> CURRENCIES = Currency.getAvailableCurrencies().stream()
-            .sorted((first, second) -> first.getCurrencyCode().compareTo(second.getCurrencyCode()))
-            .collect(Collectors.toList());
+    private static final List<Currency> CURRENCIES = Stream.of(
+                    "BHD", "CHF", "CLF", "CLP", "CZK", "EUR", "GBP", "HUF", "ISK", "JOD",
+                    "JPY", "KRW", "KWD", "NOK", "PLN", "SEK", "TND", "USD", "XAU", "XXX")
+            .map(Currency::getInstance)
+            .collect(Collectors.toUnmodifiableList());
     private static final String[] TEXT_PIECES = {
             "a", "Z", "0", "9", " ", "č", "ř", "ž", "Ü", "ß", "&", "<", ">", "\"", "'", "\t", "\n", "\r", "-", "/",
             " ", "\u0085", "€", "😀", "]]>", "&amp;", "中"

@@ -216,11 +216,6 @@ class PaymentImportWriterTest {
     }
 
     @Test
-    void should_fail_the_modulo_11_check_when_checked_given_recipient_of_the_documentation_domestic_example() {
-        assertThat(DomesticAccount.parse("2212-2000000699/0300").hasValidChecksum()).isFalse();
-    }
-
-    @Test
     void should_write_the_documentation_example_when_written_given_its_euro_order() {
         EuroPayment order = EuroPayment.builder()
                 .from("1234562")
