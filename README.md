@@ -303,9 +303,9 @@ builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` c
 - `Download(mediaType, charset, content)` for a raw download; `asText()` decodes with the charset the bank named
   or, when it named none, the one Fio documents for the format (Windows-1250 for GPC, UTF-8 otherwise).
 
-A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code) is a `DomesticAccount`;
-anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the bank sends for some
-movements, is kept as `"0"`.
+A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code when the bank sends one) is
+a `DomesticAccount`; anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the
+bank sends for some movements, is kept as `"0"`.
 
 ## Documentation
 

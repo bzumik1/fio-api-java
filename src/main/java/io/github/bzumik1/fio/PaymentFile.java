@@ -10,7 +10,7 @@ import static java.util.Objects.requireNonNull;
  * A file of payment orders ready for Fio's import, in one of the formats the bank accepts.
  *
  * @param type the format of the file
- * @param content the file, up to 2 MB
+ * @param content the file, up to {@link #MAXIMUM_SIZE} bytes (2 MiB)
  */
 public record PaymentFile(PaymentFileType type, byte[] content) {
 
