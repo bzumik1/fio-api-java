@@ -74,6 +74,8 @@ class HttpPaymentsTest {
     private static final ImportResult ACCEPTED = new ImportResult(0, Status.OK, 105699806L,
             List.of(new Sum(Currency.getInstance("CZK"), Money.czk("100.00"), Money.czk("0"))), List.of(new Message(1, Status.OK, "OK")));
 
+    private static final HttpClient LOOPBACK = HttpClient.newHttpClient();
+
     @RegisterExtension
     final StubBank bank = new StubBank();
 
@@ -311,19 +313,23 @@ class HttpPaymentsTest {
     }
 
     static Stream<Arguments> submissionsThatMayHaveGoneOut() {
+        int noLimit = FioHttp.RESPONSE_SIZE_LIMIT;
         return Stream.of(
-                argumentSet("HTTP 500", 500, "", FioAuthorizationException.class),
-                argumentSet("HTTP 409 from the bank", 409, "", FioRateLimitException.class),
-                argumentSet("HTTP 504 from a gateway", 504, "", FioException.class),
-                argumentSet("an answer this client cannot read", 200, "<html/>", FioMalformedResponseException.class));
+                argumentSet("HTTP 500", 500, "", noLimit, FioAuthorizationException.class),
+                argumentSet("HTTP 409 from the bank", 409, "", noLimit, FioRateLimitException.class),
+                argumentSet("HTTP 504 from a gateway", 504, "", noLimit, FioException.class),
+                argumentSet("an answer this client cannot read", 200, "<html/>", noLimit, FioMalformedResponseException.class),
+                argumentSet("an answer over the size limit", 200, Fixtures.read(Fixtures.IMPORT_ACCEPTED), 64,
+                        FioResponseTooLargeException.class));
     }
 
     @ParameterizedTest
     @MethodSource("submissionsThatMayHaveGoneOut")
     void should_refuse_a_second_submission_without_request_when_submitted_again_given_first_submission_reached_the_bank(
-            int status, String body, Class<? extends FioException> failure) {
+            int status, String body, int maximumResponseSize, Class<? extends FioException> failure) {
         answer(status, body);
-        FioClient.BatchRequest batch = bank.builder().rateLimit(RateLimit.failFast()).build().payments().batch().add(domestic());
+        FioClient.BatchRequest batch = bank.builder().rateLimit(RateLimit.failFast()).maximumResponseSize(maximumResponseSize)
+                .build().payments().batch().add(domestic());
 
         assertThatThrownBy(batch::submit).isExactlyInstanceOf(failure);
         assertThatIllegalStateException().isThrownBy(batch::submit)
@@ -363,7 +369,7 @@ class HttpPaymentsTest {
     @Test
     void should_send_the_batch_when_submitted_again_given_first_submission_could_not_connect() {
         answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
-        FailingHttpClient http = FailingHttpClient.failingOnceWith(new ConnectException("Connection refused"), HttpClient.newHttpClient());
+        FailingHttpClient http = FailingHttpClient.failingOnceWith(new ConnectException("Connection refused"), LOOPBACK);
         FioClient.BatchRequest batch = bank.builder().httpClient(http).build().payments().batch().add(domestic());
 
         FioTransportException failure = catchThrowableOfType(FioTransportException.class, batch::submit);
