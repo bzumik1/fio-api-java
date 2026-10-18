@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Currency;
 import java.util.List;
 import java.util.Locale;
@@ -535,6 +536,40 @@ class HttpPaymentsTest {
             orders.add(longest);
         }
         return orders;
+    }
+
+    private static List<PaymentOrder> ordersWrittenAs(int bytes) {
+        PaymentImportWriter writer = new PaymentImportWriter();
+        int one = writer.write(List.of(domestic())).length;
+        int perOrder = writer.write(List.of(domestic(), domestic())).length - one;
+        int commentElement = writer.write(List.of(PaymentSamples.domesticBuilder().comment("x").build())).length - one - 1;
+        int plainOrders = (bytes - one - commentElement - 1) / perOrder;
+        int commentBytes = bytes - one - plainOrders * perOrder - commentElement;
+        int euroSigns = Math.max(0, (commentBytes - 140 + 1) / 2);
+        List<PaymentOrder> orders = new ArrayList<>(Collections.nCopies(plainOrders, domestic()));
+        orders.add(PaymentSamples.domesticBuilder().comment("\u20ac".repeat(euroSigns) + "x".repeat(commentBytes - 3 * euroSigns)).build());
+        return orders;
+    }
+
+    @Test
+    void should_send_when_submitted_given_batch_written_as_exactly_the_import_size() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        List<PaymentOrder> orders = ordersWrittenAs(PaymentFile.MAXIMUM_SIZE);
+
+        client().payments().submit(new PaymentBatch(orders));
+
+        assertThat(new PaymentImportWriter().write(orders)).hasSize(PaymentFile.MAXIMUM_SIZE);
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
+    }
+
+    @Test
+    void should_reject_without_request_when_submitted_given_batch_written_as_one_byte_over_the_import_size() {
+        PaymentBatch batch = new PaymentBatch(ordersWrittenAs(PaymentFile.MAXIMUM_SIZE + 1));
+
+        assertThatIllegalArgumentException().isThrownBy(() -> client().payments().submit(batch))
+                .withMessage("The batch written as XML is 2097153 bytes, more than the 2097152 bytes the bank "
+                        + "imports; submit it in smaller batches");
+        assertThat(server().requests()).isEmpty();
     }
 
     @Test
