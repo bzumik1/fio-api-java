@@ -1,5 +1,10 @@
 # fio-api
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.bzumik1/fio-api)](https://central.sonatype.com/artifact/io.github.bzumik1/fio-api)
+[![javadoc](https://javadoc.io/badge2/io.github.bzumik1/fio-api/javadoc.svg)](https://javadoc.io/doc/io.github.bzumik1/fio-api)
+[![Build](https://github.com/bzumik1/fio-api-java/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/bzumik1/fio-api-java/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Java client for the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictví", documentation version 1.9
 of 16 October 2025). It covers the whole API: account movements and official statements, typed or in any format
 the bank offers, the server-side bookmark, a merchant's card transactions, and the submission of payment orders.
@@ -13,11 +18,25 @@ the bank offers, the server-side bookmark, a merchant's card transactions, and t
   the URL path of every download, so it is in the request line your HTTP logging or proxy sees.
 - Every line and branch is covered by tests, which run against an in-process stub of the bank.
 
+## Installation
+
+Gradle, Kotlin DSL:
+
 ```kotlin
 dependencies {
     implementation("io.github.bzumik1:fio-api:1.0.0")
 }
 ```
+
+Gradle, Groovy DSL:
+
+```groovy
+dependencies {
+    implementation 'io.github.bzumik1:fio-api:1.0.0'
+}
+```
+
+Maven:
 
 ```xml
 <dependency>
@@ -25,6 +44,12 @@ dependencies {
     <artifactId>fio-api</artifactId>
     <version>1.0.0</version>
 </dependency>
+```
+
+A modular application adds the module to its `module-info.java`:
+
+```
+requires io.github.bzumik1.fio;
 ```
 
 ## Usage
@@ -240,12 +265,14 @@ out by talking to the bank, beyond the documentation, is in the Javadoc of the r
 ## Building
 
 ```
-./gradlew build                 # compile, test on Java 17, enforce 100 % coverage, javadoc
-./gradlew build -PtestJdk=25    # the same, with the tests running on Java 25
+./gradlew build                      # compile, test on Java 17, enforce 100 % coverage, javadoc, module smoke test
+./gradlew build -PtestJdk=25         # the same, with the tests running on Java 25
+./gradlew build publishToMavenLocal  # also publish the snapshot into ~/.m2, as the pull request check does
 ```
 
-Java 17 is downloaded by Gradle's toolchain; any JDK that runs Gradle 9 is enough. Releases are described in
-[docs/releasing.md](docs/releasing.md).
+Java 17 is downloaded by Gradle's toolchain; any JDK that runs Gradle 9 is enough. Dependency and plugin
+versions live in `gradle/libs.versions.toml`. How to contribute is in [CONTRIBUTING.md](CONTRIBUTING.md),
+releases are described in [docs/releasing.md](docs/releasing.md).
 
 ## License
 

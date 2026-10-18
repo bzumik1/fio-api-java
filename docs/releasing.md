@@ -1,16 +1,33 @@
 # Releasing
 
-A release is a git tag `vX.Y.Z` on `main`. The `Release` workflow checks the tag, runs the full build on Java 17,
-21 and 25, signs the artifacts, publishes `io.github.bzumik1:fio-api:X.Y.Z` to Maven Central and creates the
-GitHub release with generated notes and the jars attached. Nothing else has to be done by hand.
+A release is a signed git tag `vX.Y.Z` on `main`. The `Release` workflow checks the tag, runs the full build on
+Java 17, 21 and 25, builds and signs the artifacts, keeps a copy of them, publishes
+`io.github.bzumik1:fio-api:X.Y.Z` to Maven Central and creates the GitHub release with the version's changelog
+section as notes and the jars, their signatures and a build provenance attestation attached. Nothing else has
+to be done by hand.
 
 ```
 git switch main && git pull
-git tag v1.0.0
+git tag -s v1.0.0 -m "fio-api 1.0.0"
 git push origin v1.0.0
 ```
 
-Before tagging, move the `Unreleased` section of [CHANGELOG.md](../CHANGELOG.md) under the new version.
+The tag is signed with the same GPG key that signs the artifacts (see the one-time setup below); `git tag -s`
+uses the key `user.signingkey` names in the git config.
+
+Before tagging, in [CHANGELOG.md](../CHANGELOG.md):
+
+1. Rename the `## [Unreleased]` section to the version with the date, `## [1.0.0] - 2026-10-20`, and start a
+   new empty `## [Unreleased]` section above it. The tag check fails when there is no `## [X.Y.Z]` heading for
+   the tag, and the GitHub release takes everything between that heading and the next `## [` heading as its
+   notes.
+2. Add the link references at the bottom of the file, as Keep a Changelog prescribes:
+   ```
+   [Unreleased]: https://github.com/bzumik1/fio-api-java/compare/v1.0.0...HEAD
+   [1.0.0]: https://github.com/bzumik1/fio-api-java/releases/tag/v1.0.0
+   ```
+   Every later version compares with its predecessor:
+   `[1.1.0]: https://github.com/bzumik1/fio-api-java/compare/v1.0.0...v1.1.0`.
 
 The version in `gradle.properties` stays `-SNAPSHOT`; the workflow passes the tag's version with `-Pversion`.
 After a release, bump `gradle.properties` to the next snapshot.
@@ -28,41 +45,75 @@ After a release, bump `gradle.properties` to the next snapshot.
    gpg --list-keys --keyid-format long            # note the key id
    gpg --keyserver keyserver.ubuntu.com --send-keys <key id>
    gpg --armor --export-secret-keys <key id>      # the whole block goes into the SIGNING_KEY secret
+   git config --global user.signingkey <key id>   # so that git tag -s uses the same key
    ```
    The key expires after three years. Before that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send
    it to the key server again and replace the `SIGNING_KEY` secret; a release signed with an expired key is
    refused by Central.
-4. **Repository secrets** (Settings > Secrets and variables > Actions):
+4. **Repository settings**, described in the next section; the secrets from steps 2 and 3 go into the
+   `maven-central` environment.
 
-   | Secret | Value |
-   |---|---|
-   | `MAVEN_CENTRAL_USERNAME` | the token username from step 2 |
-   | `MAVEN_CENTRAL_PASSWORD` | the token password from step 2 |
-   | `SIGNING_KEY` | the ASCII-armoured secret key from step 3 |
-   | `SIGNING_KEY_PASSWORD` | the passphrase of that key |
+## Repository settings
 
-5. **Private vulnerability reporting** (Settings > Code security): switch it on, so that the report link in
-   [SECURITY.md](../SECURITY.md) works.
+These are set once by the owner in the repository's Settings on GitHub; the workflows assume them.
 
-The workflow hands the secrets to the build as `ORG_GRADLE_PROJECT_mavenCentralUsername`,
-`ORG_GRADLE_PROJECT_mavenCentralPassword`, `ORG_GRADLE_PROJECT_signingInMemoryKey` and
-`ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`, which the
-[gradle-maven-publish-plugin](https://github.com/vanniktech/gradle-maven-publish-plugin) reads.
+- **Environment `maven-central`** (Settings > Environments). The publish job of the release workflow runs in
+  it (`environment: maven-central` in `release.yml`), and the secrets it sees are the environment's, so they
+  are defined there and not as repository secrets. GitHub creates the environment on the first run that names
+  it, but the secrets have to be added by hand before that run:
+
+  | Secret | Value |
+  |---|---|
+  | `MAVEN_CENTRAL_USERNAME` | the token username from step 2 |
+  | `MAVEN_CENTRAL_PASSWORD` | the token password from step 2 |
+  | `SIGNING_KEY` | the ASCII-armoured secret key from step 3 |
+  | `SIGNING_KEY_PASSWORD` | the passphrase of that key |
+
+  The workflow hands them to the build as `ORG_GRADLE_PROJECT_mavenCentralUsername`,
+  `ORG_GRADLE_PROJECT_mavenCentralPassword`, `ORG_GRADLE_PROJECT_signingInMemoryKey` and
+  `ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`, which the
+  [gradle-maven-publish-plugin](https://github.com/vanniktech/gradle-maven-publish-plugin) reads. An
+  environment can also require a reviewer or restrict which branches and tags may deploy to it; restricting it
+  to tags `v*` keeps a pull request from ever seeing the secrets.
+- **Tag ruleset** (Settings > Rules > Rulesets, target tags, pattern `v*`): restrict creation, update and
+  deletion to the repository owner, so only `bzumik1` can create a tag that starts a release.
+- **Branch protection on `main`** (a ruleset or the classic branch protection): require a pull request before
+  merging, require the status checks "Build and test on Java 17", "Build and test on Java 21" and "Build and
+  test on Java 25" to pass, block force pushes and deletions, and include administrators (do not add a bypass
+  for the owner), so that `main` only ever holds code the checks have seen.
+- **Workflow permissions** (Settings > Actions > General): "Read repository contents and packages permissions".
+  Each job that needs more declares it in its `permissions` block (the release job writes the release and the
+  attestation).
+- **Code security** (Settings > Code security): CodeQL default setup, Dependabot alerts (the Dependabot
+  updates come from `.github/dependabot.yml`), secret scanning with push protection, and private vulnerability
+  reporting, so that the report link in [SECURITY.md](../SECURITY.md) works.
+- `.github/CODEOWNERS` names the owner as the reviewer of everything; with "require review from Code Owners"
+  on `main`, every pull request waits for him.
 
 ## When a release fails
 
 The workflow has four jobs: the tag check, the build matrix, the publication and the GitHub release. Which one
 failed decides what to do.
 
-- **Tag check or build failed.** Nothing was published. Fix `main`, delete the tag (`git push --delete origin
-  vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again once the fix is in.
-- **Publication failed.** Read the job log: a missing or expired secret, a key not found on the key server, or a
-  validation error from Central (the POM, the signature, a missing javadoc jar). Nothing is on Central until the
-  plugin has uploaded and released the deployment, so after fixing the cause the tag can be deleted and recreated
-  as above. If the log shows the deployment was released, the version is out and the tag must stay.
+- **Tag check or build failed.** Nothing was published. A failed tag check usually means the changelog has no
+  section for the version. Fix `main`, delete the tag (`git push --delete origin vX.Y.Z` and `git tag -d
+  vX.Y.Z`) and tag again once the fix is in.
+- **Publication failed.** The job builds and signs first, uploads the jars and their `.asc` signatures as the
+  workflow artifact `jars`, and only then publishes. Read the job log: a missing or expired secret, a key not
+  found on the key server, or a validation error from Central (the POM, the signature, a missing javadoc jar).
+  Nothing is on Central until the plugin has uploaded and released the deployment, so after fixing the cause
+  the tag can be deleted and recreated as above. If the log shows the deployment was released, the version is
+  out and the tag must stay.
 - **GitHub release failed** after a successful publication. The version is on Central and cannot be changed, so
-  do not delete the tag. Re-run the failed job ("Re-run failed jobs" in the Actions tab): the release job creates
-  the GitHub release if it does not exist yet and skips it if it does.
+  do not delete the tag. Re-run the failed job ("Re-run failed jobs" in the Actions tab): the release job
+  creates the GitHub release if it does not exist yet and skips it if it does. If the job cannot be re-run,
+  create the release by hand from the `jars` artifact of the run (downloadable from the run's summary page for
+  90 days) and the changelog section:
+  ```
+  gh release create vX.Y.Z --verify-tag --title "fio-api X.Y.Z" --notes-file notes.md jars/*.jar jars/*.asc
+  ```
+  where `notes.md` holds the `## [X.Y.Z]` section of the changelog. A release created by hand has no
+  provenance attestation; say so in the notes.
 
 A version on Maven Central is permanent: it cannot be deleted or replaced. A broken `1.0.0` is followed by a
 `1.0.1` that fixes it, and the changelog says why.
@@ -70,16 +121,30 @@ A version on Maven Central is permanent: it cannot be deleted or replaced. A bro
 ## Checking a release locally
 
 ```
-./gradlew publishToMavenLocal
+./gradlew build publishToMavenLocal
 ls ~/.m2/repository/io/github/bzumik1/fio-api/
 ```
 
-This publishes the unsigned snapshot into the local Maven repository, so a project that depends on
-`io.github.bzumik1:fio-api:1.0.0-SNAPSHOT` with `mavenLocal()` can try it before a release. `./gradlew build`
-also runs a consumer of the built jar on the module path (`src/moduleSmoke`), which catches a wrong
-`module-info.java` before a release does.
+`build` produces the jar, the sources jar and the javadoc jar in `build/libs`, each with `META-INF/LICENSE`.
+`publishToMavenLocal` adds the POM and the Gradle module metadata and publishes the unsigned snapshot (the
+plugin signs only release versions) into the local Maven repository, so a project that depends on
+`io.github.bzumik1:fio-api:1.0.0-SNAPSHOT` with `mavenLocal()` can try it before a release. The build
+workflow runs the same and checks that the four files are there, so a change that breaks the publication is
+caught on the pull request and not on release day. `./gradlew build` also runs a consumer of the built jar on
+the module path (`src/moduleSmoke`), which catches a wrong `module-info.java` before a release does.
+
+To see the signing work locally, pass a key as the workflow does:
+
+```
+ORG_GRADLE_PROJECT_signingInMemoryKey="$(gpg --armor --export-secret-keys <key id>)" \
+ORG_GRADLE_PROJECT_signingInMemoryKeyPassword=... ./gradlew -Pversion=1.0.0 build signMavenPublication
+```
+
+The signatures of the jars land next to them in `build/libs/*.asc`, those of the POM and the module metadata
+in `build/publications/maven/`.
 
 ## Versioning
 
 Semantic versioning. The public API is what `module-info.java` exports; a change that breaks it is a new major
-version. Once 1.0.0 is out, the build will compare each change against the last release with japicmp.
+version. After 1.0.0 the build is meant to compare each change against the last release with japicmp, so that
+a breaking change cannot slip into a minor version; it is not wired yet.

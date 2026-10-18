@@ -7,21 +7,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check-tag:
     name: Check the tag
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: The tag names a release version and sits on main
+      - name: The tag names a release version, sits on main and has a changelog section
         env:
           TAG: ${{ github.ref_name }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not of the form vX.Y.Z"; exit 1; }
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::'$TAG' is not on main"; exit 1; }
+          grep -q "^## \[${TAG#v}\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [${TAG#v}]' section"; exit 1; }
 
   build:
     name: Build
@@ -32,6 +38,14 @@ jobs:
     name: Publish to Maven Central
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: maven-central
+    env:
+      ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+      ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+      TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,32 +54,52 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - name: Build, sign and publish
-        env:
-          TAG: ${{ github.ref_name }}
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: ./gradlew -Pversion="${TAG#v}" build publishAndReleaseToMavenCentral
+      - name: Build and sign
+        run: ./gradlew -Pversion="${TAG#v}" build signMavenPublication
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jars
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            build/libs/*.asc
           if-no-files-found: error
+      - name: Publish and release the deployment on Maven Central
+        run: ./gradlew -Pversion="${TAG#v}" publishAndReleaseToMavenCentral
 
   github-release:
     name: Create the GitHub release
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jars
           path: jars
+      - name: Take the release notes from the changelog
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v version="${TAG#v}" '
+            index($0, "## [" version "]") == 1 { inside = 1; next }
+            /^## \[/ { inside = 0 }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          grep -q '[^[:space:]]' notes.md || { echo "::error::the '## [${TAG#v}]' section of CHANGELOG.md is empty"; exit 1; }
+          printf '\nPublished to Maven Central as `io.github.bzumik1:fio-api:%s`.\n' "${TAG#v}" >> notes.md
+          cat notes.md
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: jars/*.jar
       - name: Create the release unless it exists
         env:
           TAG: ${{ github.ref_name }}
@@ -75,6 +109,5 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists"
           else
-            gh release create "$TAG" --verify-tag --generate-notes \
-              --notes "Published to Maven Central as \`io.github.bzumik1:fio-api:${TAG#v}\`." jars/*.jar
+            gh release create "$TAG" --verify-tag --title "fio-api ${TAG#v}" --notes-file notes.md jars/*
           fi
