@@ -15,12 +15,30 @@ The latest release receives fixes. Older versions do not; update to the latest m
 
 The Fio API token is the only credential. The library sends it to the bank in the URL path of each request (or
 in the body of a payment import), as the API requires, and nowhere else: it is never logged, and every message,
-URL and response body carried by a `FioException` has it replaced by `***`. The client refuses a base URI other
-than `https` unless it points at a loopback address, so a token cannot leave the machine unencrypted. If a token
-has leaked anyway, revoke it in Fio internet banking (Nastavení, API) and create a new one; the library has no
-way to do that for you.
+URL and response body carried by a `FioException` has it replaced by `***`. If a token has leaked anyway, revoke
+it in Fio internet banking (Nastavení, API) and create a new one; the library has no way to do that for you.
+
+The JDK's own diagnostics are outside the library's control. `java.net.http.HttpClient` logs the full request
+line, token included, when the JVM runs with `-Djdk.httpclient.HttpClient.log=requests`, and
+`-Djavax.net.debug` dumps the TLS plaintext; neither belongs on a production JVM.
+
+## Where the token may be sent
+
+The base URI must be `https`, with a host and without a query, a fragment or user info. The only exception is
+`http` to the literal loopback addresses `127.0.0.1` and `[::1]`, meant for an in-process stub of the bank
+(the builder also has an explicit opt-out for plain `http`, for a stub on another address). A token therefore
+cannot leave the machine unencrypted by accident.
+
+A custom `HttpClient` passed to the builder is accepted only if its redirect policy is `NEVER`: a client that
+follows redirects would re-send the request, token included, to whatever host the redirect names.
+
+## Limits on what is read
+
+A response body is read up to 64 MiB; a larger answer fails with a `FioException` instead of exhausting the
+heap. The body stored in an exception is cut to its first 16 KiB.
 
 ## Dependencies
 
-The only runtime dependency is Jackson. Dependabot opens a pull request for every dependency and GitHub Actions
-update, and the actions in the workflows are pinned to commits.
+The runtime dependencies are Jackson (`tools.jackson.core:jackson-databind`) and JSpecify
+(`org.jspecify:jspecify`, an `api` dependency, so it is on the consumer's module path). Dependabot opens a pull
+request for every dependency and GitHub Actions update, and the actions in the workflows are pinned to commits.

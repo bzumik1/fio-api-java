@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -17,6 +21,7 @@ jobs:
         java: [17, 21, 25]
     name: Build and test on Java ${{ matrix.java }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,15 +32,27 @@ jobs:
           java-version: |
             ${{ matrix.java }}
             17
+      - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - name: Build, test on Java ${{ matrix.java }} and check the coverage
+      - name: Build, test on Java ${{ matrix.java }}, check the coverage and publish to the local Maven repository
         env:
           TEST_JDK: ${{ matrix.java }}
         run: >
-          ./gradlew build
+          ./gradlew build publishToMavenLocal
           -PtestJdk="$TEST_JDK"
           -Porg.gradle.java.installations.fromEnv="JAVA_HOME_${TEST_JDK}_X64"
           -Porg.gradle.java.installations.auto-download=false
+      - name: The publication holds the POM, the jar, the sources jar and the javadoc jar
+        run: |
+          version="$(sed -n 's/^version=//p' gradle.properties)"
+          dir="$HOME/.m2/repository/io/github/bzumik1/fio-api/$version"
+          ls -l "$dir"
+          for suffix in .pom .jar -sources.jar -javadoc.jar; do
+            test -s "$dir/fio-api-$version$suffix" || { echo "::error::fio-api-$version$suffix is missing from $dir"; exit 1; }
+          done
+          for jar in "$dir"/fio-api-"$version"*.jar; do
+            unzip -l "$jar" | grep -q 'META-INF/LICENSE' || { echo "::error::$jar has no META-INF/LICENSE"; exit 1; }
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

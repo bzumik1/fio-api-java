@@ -1,7 +1,7 @@
 plugins {
 	`java-library`
 	jacoco
-	id("com.vanniktech.maven.publish") version "0.37.0"
+	alias(libs.plugins.mavenPublish)
 }
 
 group = "io.github.bzumik1"
@@ -20,13 +20,13 @@ repositories {
 }
 
 dependencies {
-	api("org.jspecify:jspecify:1.0.0")
-	implementation("tools.jackson.core:jackson-databind:3.1.2")
+	api(libs.jspecify)
+	implementation(libs.jackson.databind)
 
-	testImplementation(platform("org.junit:junit-bom:6.0.3"))
-	testImplementation("org.junit.jupiter:junit-jupiter")
-	testImplementation("org.assertj:assertj-core:3.27.7")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testImplementation(platform(libs.junit.bom))
+	testImplementation(libs.junit.jupiter)
+	testImplementation(libs.assertj)
+	testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -37,6 +37,12 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.withType<AbstractArchiveTask>().configureEach {
 	isPreserveFileTimestamps = false
 	isReproducibleFileOrder = true
+}
+
+tasks.withType<org.gradle.jvm.tasks.Jar>().configureEach {
+	from(layout.projectDirectory.file("LICENSE")) {
+		into("META-INF")
+	}
 }
 
 tasks.jar {
@@ -55,7 +61,10 @@ tasks.javadoc {
 	(options as StandardJavadocDocletOptions).apply {
 		addBooleanOption("Xdoclint:all", true)
 		addBooleanOption("Werror", true)
-		links("https://docs.oracle.com/en/java/javase/17/docs/api/")
+		linksOffline(
+			"https://docs.oracle.com/en/java/javase/17/docs/api/",
+			layout.projectDirectory.dir("gradle/javadoc/jdk17").asFile.path
+		)
 	}
 }
 
@@ -66,12 +75,19 @@ tasks.test {
 	}
 	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
 	maxHeapSize = "512m"
+	testLogging {
+		events("failed", "skipped")
+		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+		showStackTraces = true
+	}
 	finalizedBy(tasks.jacocoTestReport)
 }
 
 val moduleSmoke by sourceSets.creating
 
-configurations[moduleSmoke.implementationConfigurationName].extendsFrom(configurations.api.get(), configurations.implementation.get())
+configurations.named(moduleSmoke.implementationConfigurationName) {
+	extendsFrom(configurations.named("api").get(), configurations.named("implementation").get())
+}
 
 dependencies {
 	moduleSmoke.implementationConfigurationName(files(tasks.jar))
@@ -115,6 +131,10 @@ tasks.jacocoTestCoverageVerification {
 	}
 }
 
+tasks.assemble {
+	dependsOn(tasks.named("plainJavadocJar"))
+}
+
 tasks.check {
 	dependsOn(tasks.jacocoTestCoverageVerification, moduleSmokeTest)
 }
@@ -132,6 +152,7 @@ mavenPublishing {
 			license {
 				name = "MIT License"
 				url = "https://opensource.org/license/mit"
+				distribution = "repo"
 			}
 		}
 		developers {
@@ -145,6 +166,10 @@ mavenPublishing {
 			url = "https://github.com/bzumik1/fio-api-java"
 			connection = "scm:git:https://github.com/bzumik1/fio-api-java.git"
 			developerConnection = "scm:git:ssh://git@github.com/bzumik1/fio-api-java.git"
+		}
+		issueManagement {
+			system = "GitHub"
+			url = "https://github.com/bzumik1/fio-api-java/issues"
 		}
 	}
 }
