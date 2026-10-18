@@ -43,7 +43,7 @@ After a release, bump `gradle.properties` to the next snapshot.
    ```
    gpg --quick-generate-key "Jakub Znamenáček <znamenacekjakub@gmail.com>" rsa4096 sign 0
    gpg --list-keys --keyid-format long            # note the key id
-   gpg --keyserver keyserver.ubuntu.com --send-keys <key id>
+   gpg --keyserver hkps://keyserver.ubuntu.com --send-keys <key id>   # hkps: port 11371 is often blocked
    gpg --armor --export-secret-keys <key id>      # the whole block goes into the SIGNING_KEY secret
    git config --global user.signingkey <key id>   # so that git tag -s uses the same key
    ```
