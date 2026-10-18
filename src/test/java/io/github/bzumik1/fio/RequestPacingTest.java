@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,7 +26,9 @@ import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
 import static io.github.bzumik1.fio.StubBank.NOW;
 import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.StubFioServer.TOO_SOON;
+import static io.github.bzumik1.fio.Threads.awaitWaitingForLock;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class RequestPacingTest {
@@ -124,6 +127,16 @@ class RequestPacingTest {
         assertThat(failure.responseBody()).hasValue(TOO_SOON);
         assertThat(failure.retryAfter()).isEqualTo(NOW.plusSeconds(30));
         assertThat(failure).hasMessageContaining("30 seconds").hasMessageNotContaining(SECRET);
+    }
+
+    @Test
+    void should_wait_thirty_seconds_when_called_again_given_previous_request_failed_in_transport() {
+        FioClient unreliable = bank.builder().httpClient(FailingHttpClient.failingWith(new IOException("Connection reset"))).build();
+
+        assertThatExceptionOfType(FioTransportException.class).isThrownBy(() -> unreliable.bookmark().moveAfterTransaction(1));
+        assertThatExceptionOfType(FioTransportException.class).isThrownBy(() -> unreliable.bookmark().moveAfterTransaction(2));
+
+        assertThat(bank.time().sleeps()).containsExactly(INTERVAL);
     }
 
     @Test
@@ -380,6 +393,7 @@ class RequestPacingTest {
             Future<?> first = pool.submit(() -> patient.bookmark().moveAfterTransaction(1));
             hold.awaitArrival();
             Future<Optional<FioRateLimitException>> second = pool.submit(queuedCall);
+            awaitWaitingForLock(queued, List.of(second));
             Future<Optional<FioRateLimitException>> third = pool.submit(queuedCall);
             awaitWaitingForLock(queued, List.of(second, third));
 
@@ -395,16 +409,5 @@ class RequestPacingTest {
         } finally {
             pool.shutdownNow();
         }
-    }
-
-    private static void awaitWaitingForLock(List<Thread> threads, List<? extends Future<?>> calls) {
-        while (calls.stream().noneMatch(Future::isDone)
-                && (threads.size() < calls.size() || threads.stream().anyMatch(thread -> !isWaiting(thread)))) {
-            Thread.onSpinWait();
-        }
-    }
-
-    private static boolean isWaiting(Thread thread) {
-        return thread.getState() == Thread.State.WAITING || thread.getState() == Thread.State.TIMED_WAITING;
     }
 }

@@ -243,7 +243,7 @@ class PaymentImportPropertyTest {
                 numeric.append(Character.digit(symbol, 36));
             }
             int check = 98 - new BigInteger(numeric.toString()).mod(BigInteger.valueOf(97)).intValue();
-            return country + String.format("%02d", check) + bban;
+            return country + String.format(Locale.ROOT, "%02d", check) + bban;
         }
 
         private String bic() {

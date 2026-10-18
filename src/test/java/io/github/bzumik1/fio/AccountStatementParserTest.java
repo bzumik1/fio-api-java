@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
@@ -371,22 +372,28 @@ class AccountStatementParserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"<html><body>Chyba</body></html>", "{}", "[]", "{\"accountStatement\":{}}", ""})
-    void should_reject_when_parsed_given_body_that_is_not_an_account_statement(String body) {
-        assertThatThrownBy(() -> parser.parse(body)).isInstanceOf(MalformedResponseException.class);
+    @CsvSource(delimiter = '|', value = {
+            "<html><body>Chyba</body></html>|The body is not valid JSON",
+            "{}|The body has no accountStatement object",
+            "[]|The body has no accountStatement object",
+            "{\"accountStatement\":{}}|The statement has no info object",
+            "''|The body has no accountStatement object"
+    })
+    void should_reject_when_parsed_given_body_that_is_not_an_account_statement(String body, String reason) {
+        assertThatThrownBy(() -> parser.parse(body)).isInstanceOf(MalformedResponseException.class).hasMessage(reason);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            ",\"transactionList\":{\"transaction\":{}}",
-            ",\"transactionList\":{\"transaction\":\"none\"}",
-            ",\"transactionList\":{\"transaction\":[1]}",
-            ",\"transactionList\":{\"transaction\":[null]}"
+    @CsvSource(delimiter = '|', value = {
+            ",\"transactionList\":{\"transaction\":{}}|transactionList.transaction is not an array",
+            ",\"transactionList\":{\"transaction\":\"none\"}|transactionList.transaction is not an array",
+            ",\"transactionList\":{\"transaction\":[1]}|A transaction is not an object",
+            ",\"transactionList\":{\"transaction\":[null]}|A transaction is not an object"
     })
-    void should_reject_when_parsed_given_transaction_list_of_wrong_shape(String transactionList) {
+    void should_reject_when_parsed_given_transaction_list_of_wrong_shape(String transactionList, String reason) {
         String json = "{\"accountStatement\":{\"info\":" + MINIMAL_INFO + transactionList + "}}";
 
-        assertThatThrownBy(() -> parser.parse(json)).isInstanceOf(MalformedResponseException.class);
+        assertThatThrownBy(() -> parser.parse(json)).isInstanceOf(MalformedResponseException.class).hasMessage(reason);
     }
 
     @Test
@@ -568,6 +575,6 @@ class AccountStatementParserTest {
     }
 
     private static String column(int id, String name, String jsonValue) {
-        return "\"column%d\":{\"value\":%s,\"name\":\"%s\",\"id\":%d}".formatted(id, jsonValue, name, id);
+        return String.format(Locale.ROOT, "\"column%d\":{\"value\":%s,\"name\":\"%s\",\"id\":%d}", id, jsonValue, name, id);
     }
 }

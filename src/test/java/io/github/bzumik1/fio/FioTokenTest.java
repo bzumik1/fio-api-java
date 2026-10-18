@@ -30,7 +30,7 @@ class FioTokenTest {
     @EmptySource
     @ValueSource(strings = {"   ", "\n"})
     void should_reject_when_created_given_no_value(String value) {
-        assertThatIllegalArgumentException().isThrownBy(() -> FioToken.of(value));
+        assertThatIllegalArgumentException().isThrownBy(() -> FioToken.of(value)).withMessageContaining("is required");
     }
 
     @Test
@@ -43,7 +43,7 @@ class FioTokenTest {
     void should_reject_without_echoing_value_when_created_given_fewer_than_sixteen_characters(String value) {
         assertThatIllegalArgumentException().isThrownBy(() -> FioToken.of(value))
                 .withMessageContaining("at least 16")
-                .withMessageNotContaining(value.strip().length() > 1 ? value.strip() : "'" + value.strip() + "'");
+                .withMessageNotContaining(value.strip());
     }
 
     @Test
@@ -52,10 +52,13 @@ class FioTokenTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"abc/def", "abc def", "abc?x=1", "abc%2F", "ab.cd"})
-    void should_reject_without_echoing_value_when_created_given_characters_unsafe_in_url_path(String value) {
+    @ValueSource(strings = {"/x", " x", "?x=1", "%2F", ".x"})
+    void should_reject_without_echoing_value_when_created_given_characters_unsafe_in_url_path(String unsafe) {
+        String value = SECRET.substring(0, 20) + unsafe;
+
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> FioToken.of(value))
+                .withMessageContaining("only letters, digits")
                 .withMessageNotContaining(value);
     }
 

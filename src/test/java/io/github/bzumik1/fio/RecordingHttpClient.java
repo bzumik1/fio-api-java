@@ -13,16 +13,25 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RecordingHttpClient extends HttpClientDouble {
 
     private final List<HttpRequest> requests = new CopyOnWriteArrayList<>();
     private final int status;
-    private final byte[] body;
+    private final List<byte[]> parts;
 
     RecordingHttpClient(int status, byte[] body) {
+        this(status, body.length == 0 ? List.of() : List.of(body.clone()));
+    }
+
+    private RecordingHttpClient(int status, List<byte[]> parts) {
         this.status = status;
-        this.body = body.clone();
+        this.parts = List.copyOf(parts);
+    }
+
+    static RecordingHttpClient answeringInParts(int status, List<byte[]> parts) {
+        return new RecordingHttpClient(status, parts);
     }
 
     List<HttpRequest> requests() {
@@ -34,6 +43,7 @@ final class RecordingHttpClient extends HttpClientDouble {
         requests.add(request);
         HttpHeaders headers = HttpHeaders.of(Map.of(), (name, value) -> true);
         HttpResponse.BodySubscriber<T> subscriber = handler.apply(new ResponseInfo(status, headers));
+        AtomicBoolean cancelled = new AtomicBoolean();
         subscriber.onSubscribe(new Flow.Subscription() {
             @Override
             public void request(long n) {
@@ -41,12 +51,18 @@ final class RecordingHttpClient extends HttpClientDouble {
 
             @Override
             public void cancel() {
+                cancelled.set(true);
             }
         });
-        if (body.length > 0) {
-            subscriber.onNext(List.of(ByteBuffer.wrap(body)));
+        for (byte[] part : parts) {
+            if (cancelled.get()) {
+                break;
+            }
+            subscriber.onNext(List.of(ByteBuffer.wrap(part)));
         }
-        subscriber.onComplete();
+        if (!cancelled.get()) {
+            subscriber.onComplete();
+        }
         return subscriber.getBody().toCompletableFuture().thenApply(content -> new Response<>(request, status, headers, content));
     }
 

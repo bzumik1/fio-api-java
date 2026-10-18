@@ -122,7 +122,7 @@ class HttpMerchantTest {
     }
 
     @Test
-    void should_raise_generic_failure_without_token_when_fetched_given_ok_answer_that_is_not_a_merchant_statement() {
+    void should_raise_malformed_response_without_token_when_fetched_given_ok_answer_that_is_not_a_merchant_statement() {
         server().respondWith(200, "text/html", ("<html><body>Údržba " + SECRET + "</body></html>").getBytes(StandardCharsets.UTF_8));
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client().merchant().between(FROM, TO).fetch());

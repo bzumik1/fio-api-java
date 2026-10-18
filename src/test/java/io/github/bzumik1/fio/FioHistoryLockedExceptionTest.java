@@ -11,9 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FioHistoryLockedExceptionTest {
 
-    private static final String BANK_SENTENCE = "Data není možné poskytnout bez silné autorizace. Pokyn k zobrazení dat si"
-            + " autorizujte ve Vašem Internetovém bankovnictví a data si vyžádejte znovu. Platnost ověření je 10 minut od"
-            + " autorizace. Nebo požádejte o data, která nejsou starší jak 90 dnů (od 19.7.2026).";
+    private static final String BANK_SENTENCE = StubFioServer.historyLockedBody(LocalDate.of(2026, 7, 19));
 
     @Test
     void should_read_the_earliest_day_when_asked_given_the_sentence_the_bank_sends() {
