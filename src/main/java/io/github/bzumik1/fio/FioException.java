@@ -108,15 +108,17 @@ public sealed class FioException extends RuntimeException
      * Tells whether the bank may have acted on the request although it failed: whether a submitted batch may be
      * waiting for authorisation, or {@link FioClient.Transactions#sinceBookmark()} may have moved the bookmark.
      * It is {@code true} for a {@link FioMalformedResponseException} and a {@link FioResponseTooLargeException},
-     * which come after the bank answered, and for a {@link FioTransportException} whose
-     * {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}. It is {@code false} for an error
-     * status, with which Fio refuses a request without acting on it, and for a request the client did not send.
-     * When it is {@code true}, check the pending batches in Fio internet banking, or move the bookmark back, before
-     * trying again.
+     * which come after the bank answered, for a {@link FioTransportException} whose
+     * {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, and for HTTP 502 and 504, which a
+     * gateway sends after it passed the request on and got no usable answer. It is {@code false} for the other
+     * error statuses, with which the bank refuses a request without acting on it (a 500 among them, which Fio
+     * documents as its refusal of a token, so it is taken to mean nothing was accepted), and for a request the
+     * client did not send. When it is {@code true}, check the pending batches in Fio internet banking, or move the
+     * bookmark back, before trying again.
      *
      * @return whether the request may have taken effect
      */
     public boolean mayHaveTakenEffect() {
-        return false;
+        return statusCode != null && (statusCode == 502 || statusCode == 504);
     }
 }

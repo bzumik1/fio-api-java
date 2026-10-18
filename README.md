@@ -172,10 +172,11 @@ currency as `Money`, and a message per rejected order. A batch the bank checked 
 result whose `isAccepted()` is false, not as an exception.
 
 When a submission fails, read the exception's `mayHaveTakenEffect()` before trying again: when it is true (a
-timeout after the request went out, an answer the client could not read or one too long to read), the batch may
-already be waiting for authorisation, and submitting it again would pay twice, so check the pending batches in
-internet banking first. The same holds for `sinceBookmark()`, which may already have moved the bookmark: move it
-back to the last stored movement before downloading again.
+timeout after the request went out, an answer the client could not read or one too long to read, or HTTP 502 or
+504 from a gateway that passed the request on), the batch may already be waiting for authorisation, and
+submitting it again would pay twice, so check the pending batches in internet banking first. The same holds for
+`sinceBookmark()`, which may already have moved the bookmark: move it back to the last stored movement before
+downloading again.
 
 A batch from `batch()` is spent by a `submit()` that may have reached the bank, so a second `submit()` throws
 `IllegalStateException` instead of paying twice. One that certainly never left the client, a
@@ -254,7 +255,10 @@ longer than the client reads, with its `limit()`) and the plain `FioException` f
 
 When `mayHaveTakenEffect()` is true, the bank may have acted on the request: after a payment submission check the
 pending batches in internet banking before submitting again, and after `sinceBookmark()` move the bookmark back
-before downloading again. A download by period or number can simply be asked again.
+before downloading again. It is true for HTTP 502 and 504, which a gateway sends after passing the request on,
+and false for the other statuses, with which the bank refuses without acting; a 500, which Fio documents as its
+refusal of a token, is taken to mean nothing was accepted. A download by period or number can simply be asked
+again.
 
 ## Compatibility
 

@@ -80,10 +80,14 @@ class FioExceptionTest {
         Instant slot = Instant.parse("2026-10-17T08:00:30Z");
         return Stream.of(
                 argumentSet("other status", new FioException("refused", 404, "Chyba"), false),
+                argumentSet("server error", new FioException("refused", 500, "Chyba"), false),
+                argumentSet("bad gateway", new FioException("refused", 502, "Bad Gateway"), true),
+                argumentSet("gateway timeout", new FioException("refused", 504, "Gateway Timeout"), true),
                 argumentSet("no answer", new FioException("no answer", new RuntimeException("boom")), false),
                 argumentSet("rate limit refused", new FioRateLimitException("refused", "wait", slot), false),
                 argumentSet("rate limit not sent", FioRateLimitException.notSent("not sent", slot), false),
                 argumentSet("authorization", new FioAuthorizationException("refused", 401, "bad token"), false),
+                argumentSet("authorization with a gateway status", new FioAuthorizationException("refused", 502, ""), false),
                 argumentSet("history locked", new FioHistoryLockedException("refused",
                         StubFioServer.historyLockedBody(LocalDate.of(2026, 7, 19))), false),
                 argumentSet("too many transactions", new FioTooManyTransactionsException("refused", "too many"), false),

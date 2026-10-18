@@ -25,4 +25,14 @@ public final class FioAuthorizationException extends FioException {
     public FioAuthorizationException(String message, int statusCode, @Nullable String responseBody) {
         super(message, statusCode, responseBody);
     }
+
+    /**
+     * Returns {@code false}: the bank refused the token without acting on the request.
+     *
+     * @return {@code false}
+     */
+    @Override
+    public boolean mayHaveTakenEffect() {
+        return false;
+    }
 }

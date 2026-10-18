@@ -28,6 +28,8 @@ All notable changes to this library are recorded here. The format follows
   batch may have been accepted or the bookmark moved. The token never appears in any of them, nor do 12 or more
   of its first characters where a message cuts it short; a response body is kept to its first 16 Ki characters
   and a value quoted from it to its first 200.
+- `mayHaveTakenEffect()` is true for HTTP 502 and 504, which a gateway sends after passing the request on, and
+  false for the statuses with which the bank refuses, 500 among them.
 - Payment batches are checked before sending: one account, one currency, at most 2 MiB of Fio XML. A batch
   request is spent by a submission that may have reached the bank, so it cannot pay twice, and stays open after
   one that never left the client.

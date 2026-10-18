@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
@@ -313,6 +314,7 @@ class HttpPaymentsTest {
         return Stream.of(
                 argumentSet("HTTP 500", 500, "", FioAuthorizationException.class),
                 argumentSet("HTTP 409 from the bank", 409, "", FioRateLimitException.class),
+                argumentSet("HTTP 504 from a gateway", 504, "", FioException.class),
                 argumentSet("an answer this client cannot read", 200, "<html/>", FioMalformedResponseException.class));
     }
 
@@ -641,6 +643,20 @@ class HttpPaymentsTest {
 
         assertThatIllegalStateException().isThrownBy(() -> addition.accept(batch))
                 .withMessage("The batch was already submitted; build a new one to add orders");
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"500, false", "502, true", "504, true"})
+    void should_say_whether_the_batch_may_have_been_accepted_when_submitted_given_server_or_gateway_error(
+            int status, boolean mayHaveTakenEffect) {
+        answer(status, "<html>Error</html>");
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> client().payments().submit(PaymentBatch.of(domestic())));
+
+        assertThat(failure.statusCode()).hasValue(status);
+        assertThat(failure.mayHaveTakenEffect()).isEqualTo(mayHaveTakenEffect);
         assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
     }
 
