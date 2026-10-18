@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.tuple;
 
@@ -411,12 +412,23 @@ class FioClientTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "http://fioapi.fio.cz/v1/rest", "http://192.168.1.10/v1/rest", "http://localhost.example/v1", "http://localhost:8089/v1",
-            "http://127.0.0.2/v1", "http://LOCALHOST/v1", "http://0.0.0.0/v1", "ftp://127.0.0.1/v1"})
-    void should_reject_when_base_uri_set_given_plain_http_to_a_host_that_is_not_a_loopback_address(String uri) {
+            "http://127.0.0.2/v1", "http://LOCALHOST/v1", "http://0.0.0.0/v1", "HTTP://fioapi.fio.cz/v1/rest"})
+    void should_refuse_to_build_naming_the_ways_out_when_built_given_plain_http_to_a_host_that_is_not_a_loopback_address(String uri) {
+        FioClient.Builder builder = FioClient.builder(TOKEN).baseUri(URI.create(uri));
+
+        assertThatIllegalStateException().isThrownBy(builder::build)
+                .withMessage("The Fio API base URI must use https, the token travels in it; plain http is accepted only "
+                        + "for 127.0.0.1 and [::1], or after allowPlainHttp(): " + uri);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ftp://127.0.0.1/v1", "ws://fioapi.fio.cz/v1/rest", "file://fio.example/v1"})
+    void should_reject_when_base_uri_set_given_scheme_that_is_neither_https_nor_http(String uri) {
         FioClient.Builder builder = FioClient.builder(TOKEN);
 
         assertThatIllegalArgumentException().isThrownBy(() -> builder.baseUri(URI.create(uri)))
-                .withMessageContaining("https");
+                .withMessageStartingWith("The Fio API base URI must use https")
+                .withMessageContaining("allowPlainHttp()");
     }
 
     @ParameterizedTest
@@ -451,6 +463,18 @@ class FioClientTest {
     }
 
     @Test
+    void should_send_over_plain_http_when_built_given_opt_in_after_the_base_uri() {
+        RecordingHttpClient http = recording();
+        FioClient pointed = FioClient.builder(TOKEN).baseUri(URI.create("http://stub:8089/v1/rest")).allowPlainHttp()
+                .httpClient(http).build();
+
+        pointed.bookmark().moveAfterTransaction(7);
+
+        assertThat(http.requests()).extracting(HttpRequest::uri)
+                .containsExactly(URI.create("http://stub:8089/v1/rest/set-last-id/" + SECRET + "/7/"));
+    }
+
+    @Test
     void should_reject_when_http_client_set_given_client_that_follows_redirects() {
         FioClient.Builder builder = FioClient.builder(TOKEN);
         HttpClient following = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
@@ -460,7 +484,9 @@ class FioClientTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"http://127.0.0.1:8089/v1/rest", "http://[::1]:8089/v1/rest", "https://fio.example/api"})
+    @ValueSource(strings = {
+            "http://127.0.0.1:8089/v1/rest", "http://[::1]:8089/v1/rest", "https://fio.example/api",
+            "HTTPS://fioapi.fio.cz/v1/rest", "Https://fio.example/api", "HTTP://127.0.0.1:8089/v1/rest"})
     void should_send_to_that_address_when_base_uri_set_given_https_or_loopback_uri(String uri) {
         RecordingHttpClient http = recording();
         FioClient pointed = FioClient.builder(TOKEN).baseUri(URI.create(uri)).httpClient(http).build();

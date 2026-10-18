@@ -405,6 +405,8 @@ public interface FioClient {
         private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(2);
         private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "[::1]");
+        private static final String HTTPS = "https";
+        private static final String HTTP = "http";
 
         private final FioToken token;
         private URI baseUri = DEFAULT_BASE_URI;
@@ -424,14 +426,15 @@ public interface FioClient {
         /**
          * Points the client at another address, for example a stub server in tests. The token travels in the
          * request path, so the address has to be {@code https}; plain {@code http} is accepted only for the
-         * loopback addresses {@code 127.0.0.1} and {@code [::1]}, or after {@link #allowPlainHttp()}.
+         * loopback addresses {@code 127.0.0.1} and {@code [::1]}, or with {@link #allowPlainHttp()}, which
+         * {@link #build()} checks, so the two can be called in either order.
          *
-         * @param baseUri an absolute URI with a host and without user info, query or fragment,
-         *        {@link #DEFAULT_BASE_URI} by default
+         * @param baseUri an absolute {@code https} or {@code http} URI with a host and without user info, query
+         *        or fragment, {@link #DEFAULT_BASE_URI} by default
          * @return this builder
          * @throws IllegalArgumentException when the URI is relative, has no host the JDK can send a request to,
-         *         carries user info, a query or a fragment, or is plain {@code http} to a host that is not a
-         *         loopback address
+         *         carries user info, a query or a fragment, or its scheme is neither {@code https} nor
+         *         {@code http}
          */
         public Builder baseUri(URI baseUri) {
             requireNonNull(baseUri, "baseUri");
@@ -445,17 +448,18 @@ public interface FioClient {
                 throw new IllegalArgumentException(
                         "The Fio API base URI must not carry user info, a query or a fragment, the request path is appended to it: " + baseUri);
             }
-            if (!"https".equals(baseUri.getScheme()) && !isPlainHttpToLoopback(baseUri)) {
-                throw new IllegalArgumentException("The Fio API base URI must use https, the token travels in it: " + baseUri);
+            if (!HTTPS.equalsIgnoreCase(baseUri.getScheme()) && !HTTP.equalsIgnoreCase(baseUri.getScheme())) {
+                throw new IllegalArgumentException(httpsRequired(baseUri));
             }
             this.baseUri = baseUri;
             return this;
         }
 
         /**
-         * Lets {@link #baseUri(URI)} accept plain {@code http} to any host, for a stub on another machine or in
-         * another container. Every request then carries the token unencrypted to that host, so this is for tests
-         * only; the production address needs nothing of the kind.
+         * Lets the {@link #baseUri(URI) base URI} be plain {@code http} to any host, for a stub on another machine
+         * or in another container, whether it is set before or after this call. Every request then carries the
+         * token unencrypted to that host, so this is for tests only; the production address needs nothing of the
+         * kind.
          *
          * @return this builder
          */
@@ -501,6 +505,7 @@ public interface FioClient {
          *
          * @param requestTimeout a positive duration, 2 minutes by default
          * @return this builder
+         * @throws IllegalArgumentException when the duration is zero or negative
          */
         public Builder requestTimeout(Duration requestTimeout) {
             requireNonNull(requestTimeout, "requestTimeout");
@@ -527,6 +532,7 @@ public interface FioClient {
          *
          * @param locale Czech, Slovak or English; English by default
          * @return this builder
+         * @throws IllegalArgumentException when the locale's language is not Czech, Slovak or English
          */
         public Builder messageLocale(Locale locale) {
             requireNonNull(locale, "locale");
@@ -542,8 +548,9 @@ public interface FioClient {
             return this;
         }
 
-        private boolean isPlainHttpToLoopback(URI uri) {
-            return "http".equals(uri.getScheme()) && (plainHttpAllowed || LOOPBACK_HOSTS.contains(uri.getHost()));
+        private static String httpsRequired(URI uri) {
+            return "The Fio API base URI must use https, the token travels in it; plain http is accepted only for "
+                    + "127.0.0.1 and [::1], or after allowPlainHttp(): " + uri;
         }
 
         Sleeper sleeper() {
@@ -556,11 +563,18 @@ public interface FioClient {
         }
 
         /**
-         * Builds the client.
+         * Builds the client. Each call builds an independent client with its own rate limiting and, unless one
+         * was {@link #httpClient(HttpClient) given}, its own HTTP client; two clients built for the same token
+         * cannot keep the 30 seconds between each other's requests, so build one and share it.
          *
          * @return the client
+         * @throws IllegalStateException when the base URI is plain {@code http} to a host other than
+         *         {@code 127.0.0.1} and {@code [::1]} and {@link #allowPlainHttp()} was not called
          */
         public FioClient build() {
+            if (HTTP.equalsIgnoreCase(baseUri.getScheme()) && !plainHttpAllowed && !LOOPBACK_HOSTS.contains(baseUri.getHost())) {
+                throw new IllegalStateException(httpsRequired(baseUri));
+            }
             RequestPacer pacer = new RequestPacer(rateLimit, clock, sleeper);
             FioHttp http = new FioHttp(
                     token, baseUri, httpClientOrDefault(), clock, requestTimeout, pacer, messageLocale, responseSizeLimit);

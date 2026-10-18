@@ -201,9 +201,10 @@ enough for every download; submitting payments needs a token allowed to do so.
 
 `FioToken` never shows its value: `toString()` prints `FioToken[***]`, and every message, URL, response body and
 cause the client puts into an exception has the token replaced by `***`. The token still travels in the URL path
-of every download, by Fio's design, so the client refuses a `baseUri` that is not `https` (except on localhost). `FioToken.of(value)` strips surrounding
-whitespace, so a token read from a file with a trailing newline works; `FioToken.fromEnvironment("FIO_TOKEN")`
-reads it from an environment variable.
+of every download, by Fio's design, so the client refuses a `baseUri` that is not `https` (plain `http` only to
+the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allowPlainHttp()`).
+`FioToken.of(value)` strips surrounding whitespace, so a token read from a file with a trailing newline works;
+`FioToken.fromEnvironment("FIO_TOKEN")` reads it from an environment variable.
 
 ## Limits of the bank, and how the client handles them
 
@@ -250,7 +251,8 @@ problem, a payment builder with a required part missing is an `IllegalStateExcep
 
 The client refuses a base URI other than `https`, because the token travels in the request path; plain `http` is
 accepted for the loopback addresses `127.0.0.1` and `[::1]`, where test stubs live, or anywhere after the
-builder's `allowPlainHttp()`. A custom `HttpClient` has to keep the JDK's default of not following redirects.
+builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` checks the two together. A custom
+`HttpClient` has to keep the JDK's default of not following redirects.
 
 ## The model
 
