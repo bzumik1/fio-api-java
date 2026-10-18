@@ -7,7 +7,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.ServerSocket;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpConnectTimeoutException;
 import java.time.Duration;
@@ -37,19 +38,20 @@ class TransportFailureTest {
 
     @Test
     void should_raise_transport_failure_that_never_reached_the_bank_when_downloading_given_connection_refused() throws IOException {
-        int recentlyClosedPort;
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            recentlyClosedPort = socket.getLocalPort();
+        try (Socket portNobodyListensOn = new Socket()) {
+            portNobodyListensOn.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            FioClient offline = bank.builder()
+                    .baseUri(URI.create("http://127.0.0.1:" + portNobodyListensOn.getLocalPort() + "/v1/rest"))
+                    .build();
+
+            FioTransportException failure = fetchFailure(offline);
+
+            assertThat(failure.mayHaveReachedTheBank()).isFalse();
+            assertThat(failure.statusCode()).isEmpty();
+            assertThat(failure.responseBody()).isEmpty();
+            assertThat(failure).hasMessageContaining("/last/***/transactions.json").hasMessageContaining("ConnectException");
+            assertThat(printed(failure)).doesNotContain(SECRET);
         }
-        FioClient offline = bank.builder().baseUri(URI.create("http://127.0.0.1:" + recentlyClosedPort + "/v1/rest")).build();
-
-        FioTransportException failure = fetchFailure(offline);
-
-        assertThat(failure.mayHaveReachedTheBank()).isFalse();
-        assertThat(failure.statusCode()).isEmpty();
-        assertThat(failure.responseBody()).isEmpty();
-        assertThat(failure).hasMessageContaining("/last/***/transactions.json");
-        assertThat(printed(failure)).doesNotContain(SECRET);
     }
 
     @Test
