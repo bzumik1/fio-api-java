@@ -582,8 +582,21 @@ public interface FioClient {
             return sleeper;
         }
 
-        Builder responseSizeLimit(int responseSizeLimit) {
-            this.responseSizeLimit = responseSizeLimit;
+        /**
+         * Stops reading an answer that grows beyond a size, so that a misbehaving host cannot exhaust the heap.
+         * The default, 256 MiB, holds the largest answer the bank documents, 50 000 movements with every field
+         * at its longest; a client that only ever downloads short periods can go lower.
+         *
+         * @param bytes the most bytes of one answer the client reads, positive; an answer longer than that fails
+         *        with a plain {@link FioException} without a status
+         * @return this builder
+         * @throws IllegalArgumentException when the size is not positive
+         */
+        public Builder maximumResponseSize(int bytes) {
+            if (bytes <= 0) {
+                throw new IllegalArgumentException("The maximum response size must be positive: " + bytes);
+            }
+            this.responseSizeLimit = bytes;
             return this;
         }
 

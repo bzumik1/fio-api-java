@@ -32,7 +32,8 @@ All notable changes to this library are recorded here. The format follows
   so a hostile answer cannot make the client build a huge `BigDecimal`.
 - `allowPlainHttp()` works whether it is called before or after `baseUri(...)`, since `build()` checks the scheme
   of the base URI; `HTTPS://` is accepted like `https://`.
-- Safety against a misbehaving network: an answer longer than 64 MiB is not read, the base URI has to be `https`
+- Safety against a misbehaving network: an answer longer than 256 MiB (the builder's `maximumResponseSize`) is
+  not read, the base URI has to be `https`
   with a host and without query or fragment (plain `http` only to a loopback address or after an explicit
   opt-out), and a custom `HttpClient` must not follow redirects.
 - Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations; the runtime dependencies are

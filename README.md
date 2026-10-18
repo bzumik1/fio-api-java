@@ -192,6 +192,7 @@ FioClient fio = FioClient.builder(token)
 | `httpClient` | 10-second connect timeout | Your own `java.net.http.HttpClient`, for a proxy or a custom SSL context. |
 | `baseUri` | `https://fioapi.fio.cz/v1/rest` | Where the bank is; point it at a stub in tests. |
 | `clock` | the system clock | The clock the rate limiting and `FioRateLimitException.retryAfter()` use. |
+| `maximumResponseSize` | 256 MiB | The most bytes of one answer the client reads; a longer answer fails instead of filling the heap. |
 
 A `FioClient` is immutable and safe to share between threads; requests through one client are serialised by its
 rate limit. Build one client per token and share it, because two clients with the same token do not know about
@@ -224,8 +225,9 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
   failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
-- An answer longer than 64 MiB is not read and fails with a plain `FioException`; the largest answer the bank
-  sends, 50 000 movements as JSON, is well under that.
+- An answer longer than 256 MiB is not read and fails with a plain `FioException`. The largest answer the bank
+  documents, 50 000 movements as JSON with every field at its longest, is about 254 MiB; a client that only
+  downloads short periods can lower the size with the builder's `maximumResponseSize`.
 
 ## Errors
 
@@ -237,9 +239,9 @@ reads the day the bank's answer names, when it names one), `FioTooManyTransactio
 `FioMalformedResponseException` (a success status with a body the client does not understand),
 `FioTransportException` (no answer: connection, TLS handshake, timeout, interruption; its
 `mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any other
-status, or without a status for an answer over 64 MiB.
+status, or without a status for an answer over the size the client reads.
 
-A `FioMalformedResponseException`, and a plain `FioException` for an answer over 64 MiB, come after the bank
+A `FioMalformedResponseException`, and a plain `FioException` for an answer over that size, come after the bank
 received the request and acted on it. A download by period or number can be asked again; after `sinceBookmark()`
 move the bookmark back before downloading again, and after a payment submission check the pending batches in
 internet banking before submitting again.

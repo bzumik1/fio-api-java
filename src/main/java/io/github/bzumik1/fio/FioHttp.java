@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
 final class FioHttp {
 
     static final Set<String> MESSAGE_LANGUAGES = Set.of("cs", "sk", "en");
-    static final int RESPONSE_SIZE_LIMIT = 64 * 1024 * 1024;
+    static final int RESPONSE_SIZE_LIMIT = 256 * 1024 * 1024;
 
     private final FioToken token;
     private final String baseUri;
