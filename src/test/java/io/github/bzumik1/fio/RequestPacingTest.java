@@ -26,6 +26,7 @@ import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
 import static io.github.bzumik1.fio.StubBank.NOW;
 import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.StubFioServer.TOO_SOON;
+import static io.github.bzumik1.fio.Threads.awaitWaitingForLock;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -408,16 +409,5 @@ class RequestPacingTest {
         } finally {
             pool.shutdownNow();
         }
-    }
-
-    private static void awaitWaitingForLock(List<Thread> threads, List<? extends Future<?>> calls) {
-        while (calls.stream().noneMatch(Future::isDone)
-                && (threads.size() < calls.size() || threads.stream().anyMatch(thread -> !isWaiting(thread)))) {
-            Thread.onSpinWait();
-        }
-    }
-
-    private static boolean isWaiting(Thread thread) {
-        return thread.getState() == Thread.State.WAITING || thread.getState() == Thread.State.TIMED_WAITING;
     }
 }

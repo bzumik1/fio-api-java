@@ -10,7 +10,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URI;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -29,6 +29,7 @@ import static io.github.bzumik1.fio.StubBank.NOW;
 import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.StubBank.TOKEN;
 import static io.github.bzumik1.fio.StubBank.printed;
+import static io.github.bzumik1.fio.Threads.awaitWaitingForLock;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
@@ -198,10 +199,13 @@ class FioClientTest {
         try {
             Future<StatementId> first = pool.submit(latest::statementId);
             hold.awaitArrival();
-            Future<StatementId> second = pool.submit(latest::statementId);
-            while (second.isDone() || pool instanceof ThreadPoolExecutor executor && executor.getActiveCount() < 2) {
-                Thread.onSpinWait();
-            }
+            List<Thread> waiting = new CopyOnWriteArrayList<>();
+            Future<StatementId> second = pool.submit(() -> {
+                waiting.add(Thread.currentThread());
+                return latest.statementId();
+            });
+            awaitWaitingForLock(waiting, List.of(second));
+            assertThat(second).isNotDone();
             hold.release();
 
             assertThat(first.get()).isEqualTo(new StatementId(2026, 10));
