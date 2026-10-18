@@ -177,6 +177,31 @@ class FioClientTest {
     }
 
     @Test
+    void should_keep_message_and_body_short_when_id_asked_given_20_kib_page_instead_of_a_statement_number() {
+        server().respondWith(200, "text/html", ("<html>" + "x".repeat(20 * 1024) + "</html>").getBytes(StandardCharsets.UTF_8));
+
+        FioMalformedResponseException failure = catchThrowableOfType(FioMalformedResponseException.class,
+                () -> client().statements().latest().statementId());
+
+        assertThat(failure.getMessage()).hasSizeLessThan(17_000)
+                .contains("Not a statement number: '<html>xxx", "x\u2026'");
+        assertThat(failure.responseBody()).hasValueSatisfying(body -> assertThat(body).hasSize(FioException.RESPONSE_BODY_LIMIT + 1));
+        assertThat(printed(failure)).hasSizeLessThan(40_000);
+    }
+
+    @Test
+    void should_keep_every_cause_short_when_fetched_given_movement_id_of_20_kib_digits() {
+        server().respondWith(200, JSON, Fixtures.read(PERIODS_STATEMENT).replace("1148734530", "\"" + "1".repeat(20 * 1024) + "\"")
+                .getBytes(StandardCharsets.UTF_8));
+
+        FioMalformedResponseException failure = catchThrowableOfType(FioMalformedResponseException.class,
+                () -> client().transactions().sinceBookmark().fetch());
+
+        assertThat(failure.getMessage()).hasSizeLessThan(1_000).contains("is not a whole number: '111", "1\u2026'");
+        assertThat(printed(failure)).hasSizeLessThan(40_000);
+    }
+
+    @Test
     void should_ask_bank_again_when_id_asked_given_first_lookup_failed() {
         server().enqueue(500, "");
         server().enqueue(200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));

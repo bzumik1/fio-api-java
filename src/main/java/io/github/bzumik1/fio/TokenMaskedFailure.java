@@ -25,7 +25,8 @@ final class TokenMaskedFailure extends Exception {
         if (failure == null || !visited.add(failure)) {
             return false;
         }
-        if (token.occursIn(failure.toString())) {
+        String described = failure.toString();
+        if (described.length() > FioException.RESPONSE_BODY_LIMIT || token.occursIn(described)) {
             return true;
         }
         for (Throwable suppressed : failure.getSuppressed()) {
@@ -38,7 +39,9 @@ final class TokenMaskedFailure extends Exception {
 
     private static TokenMaskedFailure copy(Throwable failure, FioToken token, Set<Throwable> copied) {
         copied.add(failure);
-        TokenMaskedFailure masked = new TokenMaskedFailure(token.mask(failure.toString()), failure.getStackTrace());
+        TokenMaskedFailure masked = new TokenMaskedFailure(
+                token.maskExcerpt(MalformedResponseException.excerpt(failure.toString(), FioException.RESPONSE_BODY_LIMIT)),
+                failure.getStackTrace());
         for (Throwable suppressed : failure.getSuppressed()) {
             if (!copied.contains(suppressed)) {
                 masked.addSuppressed(copy(suppressed, token, copied));

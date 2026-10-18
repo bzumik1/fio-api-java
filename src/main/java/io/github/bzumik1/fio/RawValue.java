@@ -119,7 +119,8 @@ record RawValue(String label, @Nullable String text) {
         try {
             return conversion.apply(value);
         } catch (IllegalArgumentException | DateTimeException e) {
-            throw new MalformedResponseException(label + " is not " + expected + ": '" + value + "'", e);
+            throw new MalformedResponseException(
+                    label + " is not " + expected + ": '" + MalformedResponseException.excerpt(value) + "'", e);
         }
     }
 }

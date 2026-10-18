@@ -30,7 +30,8 @@ final class ImportResponseParser {
     ImportResult parse(byte[] xml) {
         Element root = read(xml);
         if (!root.name().equals(ROOT)) {
-            throw new MalformedResponseException("The body is a <" + root.name() + ">, not a <" + ROOT + ">");
+            throw new MalformedResponseException(
+                    "The body is a <" + MalformedResponseException.excerpt(root.name()) + ">, not a <" + ROOT + ">");
         }
         Element result = root.required("result");
         return new ImportResult(
@@ -74,7 +75,8 @@ final class ImportResponseParser {
                 return status;
             }
         }
-        throw new MalformedResponseException("The " + what + " is not ok, warning, error or fatal: '" + text + "'");
+        throw new MalformedResponseException(
+                "The " + what + " is not ok, warning, error or fatal: '" + MalformedResponseException.excerpt(text) + "'");
     }
 
     private static <T> @Nullable T optionalNumber(Element parent, String name, Function<String, T> parse) {
@@ -86,7 +88,8 @@ final class ImportResponseParser {
         try {
             return parse.apply(text);
         } catch (NumberFormatException e) {
-            throw new MalformedResponseException("The " + what + " is not a number: '" + text + "'", e);
+            throw new MalformedResponseException(
+                    "The " + what + " is not a number: '" + MalformedResponseException.excerpt(text) + "'", e);
         }
     }
 

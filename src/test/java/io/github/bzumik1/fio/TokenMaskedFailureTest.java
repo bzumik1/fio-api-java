@@ -12,6 +12,37 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TokenMaskedFailureTest {
 
     @Test
+    void should_cut_the_copy_to_the_body_limit_when_masking_given_cause_with_a_huge_message() {
+        NumberFormatException huge = new NumberFormatException("For input string: \"" + "1".repeat(100_000) + "\"");
+        IllegalArgumentException failure = new IllegalArgumentException("short", huge);
+
+        Throwable masked = TokenMaskedFailure.withoutToken(failure, TOKEN);
+
+        assertThat(masked).hasMessage("java.lang.IllegalArgumentException: short");
+        assertThat(masked.getCause().getMessage())
+                .hasSize(FioException.RESPONSE_BODY_LIMIT + 1)
+                .startsWith("java.lang.NumberFormatException: For input string: \"111")
+                .endsWith("1\u2026");
+    }
+
+    @Test
+    void should_keep_the_original_when_masking_given_message_exactly_at_the_body_limit() {
+        String prefix = "java.io.IOException: ";
+        IOException failure = new IOException("x".repeat(FioException.RESPONSE_BODY_LIMIT - prefix.length()));
+
+        assertThat(TokenMaskedFailure.withoutToken(failure, TOKEN)).isSameAs(failure);
+    }
+
+    @Test
+    void should_mask_the_cut_beginning_of_the_token_when_masking_given_cause_cut_inside_the_token() {
+        IOException failure = new IOException("x".repeat(FioException.RESPONSE_BODY_LIMIT - 40) + SECRET);
+
+        Throwable masked = TokenMaskedFailure.withoutToken(failure, TOKEN);
+
+        assertThat(masked.getMessage()).endsWith("x***\u2026").doesNotContain(SECRET.substring(0, 4));
+    }
+
+    @Test
     void should_mask_every_link_once_when_masking_given_causes_that_form_a_cycle() {
         IOException first = new IOException("first " + SECRET);
         IOException second = new IOException("second " + SECRET, first);

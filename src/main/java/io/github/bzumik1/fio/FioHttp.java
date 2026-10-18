@@ -90,7 +90,8 @@ final class FioHttp {
         } catch (MalformedResponseException e) {
             throw new FioMalformedResponseException(
                     response.description() + " was answered with HTTP " + response.status()
-                            + " and a body this client does not understand: " + token.mask(e.getMessage()),
+                            + " and a body this client does not understand: "
+                            + token.maskExcerpt(MalformedResponseException.excerpt(e.getMessage(), FioException.RESPONSE_BODY_LIMIT)),
                     response.status(),
                     token.mask(response.text()),
                     TokenMaskedFailure.withoutToken(e, token));

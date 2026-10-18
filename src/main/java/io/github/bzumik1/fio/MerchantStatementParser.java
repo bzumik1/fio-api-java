@@ -28,7 +28,8 @@ final class MerchantStatementParser {
     MerchantStatement parse(byte[] xml) {
         Element root = read(xml);
         if (!root.name().equals(ROOT)) {
-            throw new MalformedResponseException("The root element is " + root.name() + ", not " + ROOT);
+            throw new MalformedResponseException(
+                    "The root element is " + MalformedResponseException.excerpt(root.name()) + ", not " + ROOT);
         }
         Element info = root.child(ROOT, "Info");
         if (info == null) {
@@ -61,7 +62,8 @@ final class MerchantStatementParser {
             return DomesticAccount.parse(account);
         } catch (IllegalArgumentException e) {
             throw new MalformedResponseException(
-                    accountId.label() + " and " + bankId.label() + " are not an account number: '" + account + "'", e);
+                    accountId.label() + " and " + bankId.label() + " are not an account number: '"
+                            + MalformedResponseException.excerpt(account) + "'", e);
         }
     }
 

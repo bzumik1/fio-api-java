@@ -41,12 +41,12 @@ public record StatementId(int year, int number) implements Comparable<StatementI
     static StatementId parse(String text) {
         Matcher matcher = FIO_FORMAT.matcher(requireNonNull(text, "text"));
         if (!matcher.matches()) {
-            throw new MalformedResponseException("Not a statement number: '" + text + "'");
+            throw new MalformedResponseException("Not a statement number: '" + MalformedResponseException.excerpt(text) + "'");
         }
         try {
             return new StatementId(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
         } catch (IllegalArgumentException e) {
-            throw new MalformedResponseException("Not a statement number: '" + text + "'", e);
+            throw new MalformedResponseException("Not a statement number: '" + MalformedResponseException.excerpt(text) + "'", e);
         }
     }
 
