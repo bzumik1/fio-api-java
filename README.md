@@ -15,8 +15,8 @@ the bank offers, the server-side bookmark, a merchant's card transactions, and t
 - A fluent API over immutable records, with [JSpecify](https://jspecify.dev) nullness annotations.
 - The bank's one-request-per-30-seconds limit is handled by the client, which waits for the next slot instead of
   failing.
-- The token never appears in a message, a `toString()` or an exception this library creates. Fio's API puts it in
-  the URL path of every download, so it is in the request line your HTTP logging or proxy sees.
+- The token never appears in a message, a `toString()` or an exception this library creates. Fio's API puts it
+  in the URL path of every download, so it is in the request line your HTTP logging or proxy sees.
 - Every line and branch is covered by tests, which run against an in-process stub of the bank.
 
 ## Installation
@@ -225,24 +225,26 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 
 ## Limits of the bank, and how the client handles them
 
-- **One request per token per 30 seconds**, whatever the endpoint or format. The client keeps the interval between
-  its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only when the
-  next slot would come later than `RateLimit.maximumWait()` after the call started (its HTTP exchanges included)
-  does the request fail with `FioRateLimitException`, whose `retryAfter()` says when the next request may go.
+- **One request per token per 30 seconds**, whatever the endpoint or format. The client keeps the interval
+  between its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only
+  when the next slot would come later than `RateLimit.maximumWait()` after the call started (its HTTP exchanges
+  included) does the request fail with `FioRateLimitException`, whose `retryAfter()` says when the next request
+  may go.
 - **90 days of history.** Data older than 90 days (counted from today, Prague time), movements, statements and
-  card transactions alike, is available only for 10 minutes after the account holder unlocks the full history for
-  the token in internet banking. Without it the bank answers HTTP 422, which becomes `FioHistoryLockedException`.
+  card transactions alike, is available only for 10 minutes after the account holder unlocks the full history
+  for the token in internet banking. Without it the bank answers HTTP 422, which becomes
+  `FioHistoryLockedException`.
 - **50 000 movements per download.** A larger answer is refused with HTTP 413, which becomes
   `FioTooManyTransactionsException`; ask for a shorter period or move the bookmark forward.
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
   failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
-- An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer the
-  bank documents, 50 000 movements as JSON with Czech text in every field at its longest, is about 254 MiB; text
-  with characters of three bytes or more in UTF-8 can make it longer. The builder's `maximumResponseSize` raises
-  the size for such answers, or lowers it for a client that only downloads short periods. The limit is for a
-  success status: an error status with a longer body keeps the beginning of it and is the exception for its
-  status.
+- An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer
+  the bank documents, 50 000 movements as JSON with Czech text in every field at its longest, is about 254 MiB;
+  text with characters of three bytes or more in UTF-8 can make it longer. The builder's `maximumResponseSize`
+  raises the size for such answers, or lowers it for a client that only downloads short periods. The limit is
+  for a success status: an error status with a longer body keeps the beginning of it and is the exception for
+  its status.
 
 ## Errors
 
@@ -254,15 +256,15 @@ newer a `switch` can name each subtype and ends with `case FioException e` for t
 reads the day the bank's answer names, when it names one), `FioTooManyTransactionsException`,
 `FioMalformedResponseException` (a success status with a body the client does not understand),
 `FioTransportException` (no answer: connection, TLS handshake, timeout, interruption; its
-`mayHaveReachedTheBank()` says whether the request may have gone out), `FioResponseTooLargeException` (an answer
-longer than the client reads, with its `limit()`) and the plain `FioException` for any other status.
+`mayHaveReachedTheBank()` says whether the request may have gone out), `FioResponseTooLargeException` (a success
+answer longer than the client reads, with its `limit()`) and the plain `FioException` for any other status.
 
-When `mayHaveTakenEffect()` is true, the bank may have acted on the request: after a payment submission check the
-pending batches in internet banking before submitting again, and after `sinceBookmark()` move the bookmark back
-before downloading again. It is true for HTTP 502 and 504, which a gateway sends after passing the request on,
-and false for the other statuses, with which the bank refuses without acting; a 500, which Fio documents as its
-refusal of a token, is taken to mean nothing was accepted. A download by period or number can simply be asked
-again.
+When `mayHaveTakenEffect()` is true, the bank may have acted on the request: after a payment submission check
+the pending batches in internet banking before submitting again, and after `sinceBookmark()` move the bookmark
+back before downloading again. It is true for HTTP 502 and 504, which a gateway sends after passing the request
+on, and false for the other statuses, with which the bank refuses without acting; a 500, which Fio documents as
+its refusal of a token, is taken to mean nothing was accepted. A download by period or number can simply be
+asked again.
 
 ## Compatibility
 
@@ -284,15 +286,15 @@ this:
   thrown too, so a `switch` over it names each subtype and ends with `case FioException e` for the rest, which
   still catches a new subtype; a `catch` of the plain class does too.
 
-The sealed hierarchies `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes only in a major
-release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
-the value types `Money`, `DomesticAccount`, `ForeignAccount`, `StatementId`, `PaymentSymbols`, `Beneficiary`,
+The sealed hierarchies `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes only in a
+major release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it the
+value types `Money`, `DomesticAccount`, `ForeignAccount`, `StatementId`, `PaymentSymbols`, `Beneficiary`,
 `PaymentBatch`, `PaymentFile`, `FioToken` and `RateLimit`.
 
 Bad input fails before anything is sent: a malformed value (an account number that fails the bank's checksum, a
 symbol that is not digits, a period that ends before it starts) is an `IllegalArgumentException` that names the
-problem, a payment builder with a required part missing is an `IllegalStateException`, and a `null` argument is a
-`NullPointerException`.
+problem, a payment builder with a required part missing is an `IllegalStateException`, and a `null` argument is
+a `NullPointerException`.
 
 The client refuses a base URI other than `https`, because the token travels in the request path; plain `http` is
 accepted for the loopback addresses `127.0.0.1` and `[::1]`, where test stubs live, or anywhere after the
@@ -310,16 +312,16 @@ builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` c
   constant, specific), `userIdentification`, `executedBy`, `messageForRecipient`, `instructionId`, `detail`,
   `comment`, `payerReference`, and `columns`, every column the bank sent by its number, for anything new.
 - `Money(amount, currency)`, which keeps the bank's scale but compares by value (`1.0 CZK` equals `1.00 CZK`),
-  `DomesticAccount(prefix, number, bankCode)` with `toIban()` and `hasValidChecksum()`, `ForeignAccount(identifier)`,
-  `PaymentSymbols`, `Counterparty`, `StatementId(year, number)`.
+  `DomesticAccount(prefix, number, bankCode)` with `toIban()` and `hasValidChecksum()`,
+  `ForeignAccount(identifier)`, `PaymentSymbols`, `Counterparty`, `StatementId(year, number)`.
 - `MerchantStatement(account, iban, bic, currency, dateStart, dateEnd, transactions)` with `CardTransaction`
   records mapped from the documented XML fields, amounts and fees as `Money` in the account's currency.
 - `Download(mediaType, charset, content)` for a raw download; `asText()` decodes with the charset the bank named
   or, when it named none, the one Fio documents for the format (Windows-1250 for GPC, UTF-8 otherwise).
 
-A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code when the bank sends one) is
-a `DomesticAccount`; anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the
-bank sends for some movements, is kept as `"0"`.
+A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code when the bank sends one)
+is a `DomesticAccount`; anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which
+the bank sends for some movements, is kept as `"0"`.
 
 ## Documentation
 
