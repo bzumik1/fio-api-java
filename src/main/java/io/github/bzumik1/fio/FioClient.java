@@ -340,7 +340,11 @@ public interface FioClient {
 
     /**
      * A batch of payment orders being put together for submission. It is meant for one thread and one submission:
-     * after {@link #submit()} it cannot be submitted again.
+     * a {@link #submit()} that may have reached the bank spends it, whatever the outcome, so that a batch the bank
+     * may have accepted is not sent twice. A submission that certainly never left the client, a
+     * {@link FioRateLimitException} without a status or a {@link FioTransportException} whose
+     * {@link FioTransportException#mayHaveReachedTheBank()} is {@code false}, leaves it unspent, so the same batch
+     * can be submitted again.
      */
     interface BatchRequest {
 
@@ -399,7 +403,8 @@ public interface FioClient {
          *         {@code true}, check the pending batches in Fio internet banking before submitting again
          * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
          *         one the token belongs to) and in the same currency, the batch written as Fio XML is larger than
-         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the account, currency and size
+         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted by a call that may have reached the
+         *         bank, as the {@linkplain BatchRequest batch} describes; the account, currency and size
          *         checks are an {@link IllegalArgumentException} from {@link PaymentBatch} and
          *         {@link Payments#submit(PaymentBatch)}, where the batch is an argument
          */

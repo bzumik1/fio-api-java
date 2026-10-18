@@ -177,6 +177,11 @@ already be waiting for authorisation, and submitting it again would pay twice, s
 internet banking first. The same holds for `sinceBookmark()`, which may already have moved the bookmark: move it
 back to the last stored movement before downloading again.
 
+A batch from `batch()` is spent by a `submit()` that may have reached the bank, so a second `submit()` throws
+`IllegalStateException` instead of paying twice. One that certainly never left the client, a
+`FioRateLimitException` without a status (as `RateLimit.failFast()` throws) or a `FioTransportException` whose
+`mayHaveReachedTheBank()` is false, leaves the batch unspent, and `submit()` can be called again.
+
 ### Configuration
 
 ```java

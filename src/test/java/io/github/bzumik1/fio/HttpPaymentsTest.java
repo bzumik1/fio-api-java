@@ -12,9 +12,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.ConnectException;
+import java.net.http.HttpClient;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Currency;
@@ -37,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.params.provider.Arguments.argumentSet;
@@ -300,6 +305,69 @@ class HttpPaymentsTest {
 
         assertThatIllegalStateException().isThrownBy(batch::submit)
                 .withMessage("The batch was already submitted; build a new one to submit again");
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
+    }
+
+    static Stream<Arguments> submissionsThatMayHaveGoneOut() {
+        return Stream.of(
+                argumentSet("HTTP 500", 500, "", FioAuthorizationException.class),
+                argumentSet("HTTP 409 from the bank", 409, "", FioRateLimitException.class),
+                argumentSet("an answer this client cannot read", 200, "<html/>", FioMalformedResponseException.class));
+    }
+
+    @ParameterizedTest
+    @MethodSource("submissionsThatMayHaveGoneOut")
+    void should_refuse_a_second_submission_without_request_when_submitted_again_given_first_submission_reached_the_bank(
+            int status, String body, Class<? extends FioException> failure) {
+        answer(status, body);
+        FioClient.BatchRequest batch = bank.builder().rateLimit(RateLimit.failFast()).build().payments().batch().add(domestic());
+
+        assertThatThrownBy(batch::submit).isExactlyInstanceOf(failure);
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessage("The batch was already submitted; build a new one to submit again");
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
+    }
+
+    @Test
+    void should_refuse_a_second_submission_without_request_when_submitted_again_given_transport_failure_after_sending() {
+        FailingHttpClient http = FailingHttpClient.failingWith(new IOException("Connection reset"));
+        FioClient.BatchRequest batch = bank.builder().httpClient(http).build().payments().batch().add(domestic());
+
+        FioTransportException failure = catchThrowableOfType(FioTransportException.class, batch::submit);
+
+        assertThat(failure.mayHaveReachedTheBank()).isTrue();
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessage("The batch was already submitted; build a new one to submit again");
+        assertThat(http.attempts()).isEqualTo(1);
+    }
+
+    @Test
+    void should_send_the_batch_when_submitted_again_given_first_submission_not_sent_for_the_rate_limit() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient failFast = bank.builder().rateLimit(RateLimit.failFast()).build();
+        failFast.payments().submit(PaymentBatch.of(domestic()));
+        FioClient.BatchRequest batch = failFast.payments().batch().add(domestic());
+
+        FioRateLimitException refused = catchThrowableOfType(FioRateLimitException.class, batch::submit);
+        bank.time().advance(Duration.between(bank.time().now(), refused.retryAfter()));
+        ImportResult result = batch.submit();
+
+        assertThat(refused.statusCode()).isEmpty();
+        assertThat(result).isEqualTo(ACCEPTED);
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST, IMPORT_REQUEST);
+    }
+
+    @Test
+    void should_send_the_batch_when_submitted_again_given_first_submission_could_not_connect() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FailingHttpClient http = FailingHttpClient.failingOnceWith(new ConnectException("Connection refused"), HttpClient.newHttpClient());
+        FioClient.BatchRequest batch = bank.builder().httpClient(http).build().payments().batch().add(domestic());
+
+        FioTransportException failure = catchThrowableOfType(FioTransportException.class, batch::submit);
+        ImportResult result = batch.submit();
+
+        assertThat(failure.mayHaveReachedTheBank()).isFalse();
+        assertThat(result).isEqualTo(ACCEPTED);
         assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
     }
 
