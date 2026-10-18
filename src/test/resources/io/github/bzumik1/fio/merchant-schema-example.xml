@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MerchantStatement xmlns="http://www.fio.cz/IBSchema">
+    <Info>
+        <accountId>19-2000145399</accountId>
+        <bankId>2010</bankId>
+        <currency>EUR</currency>
+        <iban>CZ6520100000192000145399</iban>
+        <bic>FIOBCZPPXXX</bic>
+    </Info>
+    <TransactionList>
+        <Transaction>
+            <operationId>8216165941</operationId>
+            <orderId>9277937166</orderId>
+            <date>2026-01-05+01:00</date>
+            <amount>-12.50</amount>
+            <transactionId>29</transactionId>
+            <transactionDateTime>2026-01-04T23:59:59.250Z</transactionDateTime>
+            <transactionAmount>-12.50</transactionAmount>
+            <transactionCurrency>EUR</transactionCurrency>
+            <type>FOREIGN</type>
+            <cardIssuer>VISA</cardIssuer>
+            <cardAssociationFee>0.10</cardAssociationFee>
+            <settlement>false</settlement>
+            <vs>12345678911234567891</vs>
+        </Transaction>
+        <Transaction>
+            <operationId>8216165942</operationId>
+            <orderId>9277937167</orderId>
+            <date>2026-01-06</date>
+            <amount>0</amount>
+        </Transaction>
+    </TransactionList>
+</MerchantStatement>

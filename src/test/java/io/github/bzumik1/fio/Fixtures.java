@@ -9,6 +9,8 @@ final class Fixtures {
 
     static final String PERIODS_STATEMENT = "periods-statement.json";
     static final String DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES = "documentation-example-epoch-dates.json";
+    static final String MERCHANT_DOCUMENTATION_EXAMPLE = "merchant-documentation-example.xml";
+    static final String MERCHANT_SCHEMA_EXAMPLE = "merchant-schema-example.xml";
 
     private Fixtures() {
     }
