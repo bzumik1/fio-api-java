@@ -28,6 +28,7 @@ import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.StubFioServer.TOO_SOON;
 import static io.github.bzumik1.fio.Threads.awaitWaitingForLock;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
@@ -97,6 +98,31 @@ class RequestPacingTest {
 
         assertThat(server().arrivals()).containsExactly(NOW, NOW.plusSeconds(35));
         assertThat(bank.time().sleeps()).containsExactly(INTERVAL);
+    }
+
+    @Test
+    void should_raise_the_refusal_without_retrying_when_bank_refuses_given_slow_refused_answer_and_maximum_wait_of_34_seconds() {
+        FioClient patient = clientWaitingUpTo(Duration.ofSeconds(34));
+        server().enqueueTaking(Duration.ofSeconds(5), 409, TOO_SOON);
+        server().respondWith(200, "");
+
+        FioRateLimitException failure = catchThrowableOfType(FioRateLimitException.class,
+                () -> patient.bookmark().moveAfterTransaction(1));
+
+        assertThat(server().arrivals()).containsExactly(NOW);
+        assertThat(failure.statusCode()).hasValue(409);
+        assertThat(failure.retryAfter()).isEqualTo(NOW.plusSeconds(35));
+    }
+
+    @Test
+    void should_retry_once_and_succeed_when_bank_refuses_given_slow_refused_answer_and_maximum_wait_of_35_seconds() {
+        FioClient patient = clientWaitingUpTo(Duration.ofSeconds(35));
+        server().enqueueTaking(Duration.ofSeconds(5), 409, TOO_SOON);
+        server().respondWith(200, "");
+
+        assertThatCode(() -> patient.bookmark().moveAfterTransaction(1)).doesNotThrowAnyException();
+
+        assertThat(server().arrivals()).containsExactly(NOW, NOW.plusSeconds(35));
     }
 
     @ParameterizedTest
