@@ -38,6 +38,12 @@ class StatementIdTest {
     }
 
     @ParameterizedTest
+    @CsvSource({"1000, 1", "9999, 1", "2026, 1"})
+    void should_accept_when_created_given_four_digit_year_and_number_from_one(int year, int number) {
+        assertThat(new StatementId(year, number)).extracting(StatementId::year, StatementId::number).containsExactly(year, number);
+    }
+
+    @ParameterizedTest
     @CsvSource(value = {"2026,10|2026|10", "' 2026,10\n'|2026|10", "2012,3|2012|3", "2012,999|2012|999"}, delimiter = '|')
     void should_read_bank_format_when_parsed_given_statement_number_text(String text, int year, int number) {
         assertThat(StatementId.parse(text)).isEqualTo(new StatementId(year, number));

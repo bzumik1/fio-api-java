@@ -336,6 +336,28 @@ class FioClientTest {
     }
 
     @Test
+    void should_send_the_first_and_last_day_when_period_chosen_given_years_one_and_9999() {
+        server().respondWith(200, Fixtures.read(PERIODS_STATEMENT));
+
+        client().transactions().between(LocalDate.of(1, 1, 1), LocalDate.of(9999, 12, 31)).fetch();
+
+        assertThat(server().requests()).extracting(RecordedRequest::path)
+                .containsExactly("/v1/rest/periods/" + SECRET + "/0001-01-01/9999-12-31/transactions.json");
+    }
+
+    @Test
+    void should_send_the_day_when_bookmark_moved_given_years_one_and_9999() {
+        server().respondWith(200, "");
+
+        client().bookmark().moveToDate(LocalDate.of(1, 1, 1));
+        client().bookmark().moveToDate(LocalDate.of(9999, 12, 31));
+
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(
+                "/v1/rest/set-last-date/" + SECRET + "/0001-01-01/",
+                "/v1/rest/set-last-date/" + SECRET + "/9999-12-31/");
+    }
+
+    @Test
     void should_reject_with_parameter_name_when_bookmark_moved_given_null_day() {
         assertThatNullPointerException().isThrownBy(() -> client().bookmark().moveToDate(null)).withMessage("date");
     }
