@@ -52,11 +52,13 @@ jobs:
           java-version: 17
       - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - name: Build and sign
+      - name: Build
+        run: ./gradlew -Pversion="${TAG#v}" build
+      - name: Sign
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: ./gradlew -Pversion="${TAG#v}" build signMavenPublication
+        run: ./gradlew -Pversion="${TAG#v}" signMavenPublication
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jars

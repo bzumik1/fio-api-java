@@ -104,9 +104,10 @@ failed decides what to do.
 - **Tag check or build failed.** Nothing was published. A failed tag check usually means the changelog has no
   section for the version. Fix `main`, delete the tag (`git push --delete origin vX.Y.Z` and `git tag -d
   vX.Y.Z`) and tag again once the fix is in.
-- **Publication failed.** The job builds and signs first, uploads the jars and their `.asc` signatures as the
-  workflow artifact `jars`, and only then publishes. Read the job log: a missing or expired secret, a key not
-  found on the key server, or a validation error from Central (the POM, the signature, a missing javadoc jar).
+- **Publication failed.** The job builds, then signs in a separate step (the only one, with the publishing
+  step, that sees the key), uploads the jars and their `.asc` signatures as the workflow artifact `jars`, and
+  only then publishes. Read the job log: a missing or expired secret, a key not found on the key server, or a
+  validation error from Central (the POM, the signature, a missing javadoc jar).
   Nothing is on Central until the plugin has uploaded and released the deployment. Before anything else, open
   Deployments at https://central.sonatype.com: a deployment that is publishing or published means the version
   is out (the job may have been killed by its timeout while Central was still validating), so the tag must
