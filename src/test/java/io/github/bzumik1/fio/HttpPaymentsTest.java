@@ -17,6 +17,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Currency;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
@@ -64,7 +65,7 @@ class HttpPaymentsTest {
     private static final String MINIMAL_DOMESTIC_IN_EURO = MINIMAL_DOMESTIC.replace("<currency>CZK</currency>", "<currency>EUR</currency>");
     private static final String MINIMAL_FOREIGN_IN_EURO = MINIMAL_FOREIGN.replace("<currency>USD</currency>", "<currency>EUR</currency>");
     private static final ImportResult ACCEPTED = new ImportResult(0, Status.OK, 105699806L,
-            List.of(new Sum("CZK", new BigDecimal("100.00"), new BigDecimal("0"))), List.of(new Message(1, Status.OK, "OK")));
+            List.of(new Sum(Currency.getInstance("CZK"), Money.czk("100.00"), Money.czk("0"))), List.of(new Message(1, Status.OK, "OK")));
 
     @RegisterExtension
     final StubBank bank = new StubBank();
@@ -395,8 +396,8 @@ class HttpPaymentsTest {
         ImportResult result = client().payments().submit(PaymentBatch.of(domestic(), domestic()));
 
         assertThat(result).isEqualTo(new ImportResult(1, Status.ERROR, null,
-                List.of(new Sum("CZK", new BigDecimal("350.50"), new BigDecimal("0")),
-                        new Sum("EUR", new BigDecimal("12.00"), new BigDecimal("0"))),
+                List.of(new Sum(Currency.getInstance("CZK"), Money.czk("350.50"), Money.czk("0")),
+                        new Sum(Currency.getInstance("EUR"), Money.of("12.00", "EUR"), Money.of("0", "EUR"))),
                 List.of(new Message(null, null, "Nalezené chyby při kontrole příkazů"),
                         new Message(1, Status.OK, "OK"),
                         new Message(2, Status.ERROR, "Neplatný kód banky příjemce."),

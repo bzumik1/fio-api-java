@@ -14,6 +14,7 @@ import javax.xml.stream.XMLStreamException;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Currency;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -21,6 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ImportResponseParserTest {
+
+    private static final Currency CZK = Currency.getInstance("CZK");
+    private static final Currency EUR = Currency.getInstance("EUR");
 
     private final ImportResponseParser parser = new ImportResponseParser();
 
@@ -36,7 +40,7 @@ class ImportResponseParserTest {
                 0,
                 Status.OK,
                 105699806L,
-                List.of(new Sum("CZK", new BigDecimal("100.00"), new BigDecimal("0"))),
+                List.of(new Sum(CZK, Money.czk("100.00"), Money.czk("0"))),
                 List.of(new Message(1, Status.OK, "OK"))));
         assertThat(result.isAccepted()).isTrue();
     }
@@ -49,8 +53,8 @@ class ImportResponseParserTest {
                 1,
                 Status.ERROR,
                 null,
-                List.of(new Sum("CZK", new BigDecimal("350.50"), new BigDecimal("0")),
-                        new Sum("EUR", new BigDecimal("12.00"), new BigDecimal("0"))),
+                List.of(new Sum(CZK, Money.czk("350.50"), Money.czk("0")),
+                        new Sum(EUR, Money.of("12.00", "EUR"), Money.of("0", "EUR"))),
                 List.of(new Message(null, null, "Nalezené chyby při kontrole příkazů"),
                         new Message(1, Status.OK, "OK"),
                         new Message(2, Status.ERROR, "Neplatný kód banky příjemce."),
@@ -66,13 +70,13 @@ class ImportResponseParserTest {
     }
 
     @Test
-    void should_keep_missing_parts_empty_when_parsed_given_sum_detail_and_message_without_attributes() {
+    void should_keep_missing_parts_empty_when_parsed_given_sum_without_amounts_and_detail_and_message_without_attributes() {
         ImportResult result = parser.parse("""
                 <responseImport>
                   <result>
                     <errorCode>2</errorCode>
                     <status>warning</status>
-                    <sums><sum/></sums>
+                    <sums><sum id="EUR"/></sums>
                   </result>
                   <ordersDetails>
                     <detail><messages><message>Bez čísla</message></messages></detail>
@@ -81,7 +85,7 @@ class ImportResponseParserTest {
                 </responseImport>
                 """);
 
-        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, null, List.of(new Sum(null, null, null)),
+        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, null, List.of(new Sum(EUR, null, null)),
                 List.of(new Message(null, null, "Bez čísla"))));
     }
 
@@ -138,9 +142,9 @@ class ImportResponseParserTest {
                     + "| The status is not ok, warning, error or fatal: 'done'",
             "<responseImport><result><errorCode>0</errorCode><idInstruction>1a</idInstruction><status>ok</status>"
                     + "</result></responseImport>| The idInstruction is not a number: '1a'",
-            "<responseImport><result><errorCode>0</errorCode><status>ok</status><sums><sum><sumDebet>1,5</sumDebet>"
+            "<responseImport><result><errorCode>0</errorCode><status>ok</status><sums><sum id='CZK'><sumDebet>1,5</sumDebet>"
                     + "</sum></sums></result></responseImport>| The sumDebet is not a number: '1,5'",
-            "<responseImport><result><errorCode>0</errorCode><status>ok</status><sums><sum><sumCredit></sumCredit>"
+            "<responseImport><result><errorCode>0</errorCode><status>ok</status><sums><sum id='CZK'><sumCredit></sumCredit>"
                     + "</sum></sums></result></responseImport>| The sumCredit is not a number: ''",
             "<responseImport><result><errorCode>0</errorCode><status>ok</status></result><ordersDetails>"
                     + "<detail id='první'/></ordersDetails></responseImport>| The detail id is not a number: 'první'",
@@ -238,13 +242,13 @@ class ImportResponseParserTest {
         ImportResult result = parser.parse(response(
                 "<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumDebet>" + text + "</sumDebet></sum></sums>"));
 
-        assertThat(result.sums()).containsExactly(new Sum("CZK", expected, null));
+        assertThat(result.sums()).containsExactly(new Sum(CZK, Money.czk(expected), null));
     }
 
     @ParameterizedTest
     @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
     void should_reject_without_building_the_number_when_parsed_given_sum_with_too_many_digits(String text) {
-        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumDebet>" + text
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumDebet>" + text
                 + "</sumDebet></sum></sums>");
 
         assertThatThrownBy(() -> parser.parse(body))
@@ -258,17 +262,43 @@ class ImportResponseParserTest {
         ImportResult result = parser.parse(response(
                 "<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumCredit>" + text + "</sumCredit></sum></sums>"));
 
-        assertThat(result.sums()).containsExactly(new Sum("CZK", null, new BigDecimal(text)));
+        assertThat(result.sums()).containsExactly(new Sum(CZK, null, Money.czk(new BigDecimal(text))));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"1e3", "1E999999999", "NaN", "0x1"})
     void should_reject_naming_the_sum_when_parsed_given_sum_that_is_not_a_plain_decimal(String text) {
-        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumCredit>" + text
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumCredit>" + text
                 + "</sumCredit></sum></sums>");
 
         assertThatThrownBy(() -> parser.parse(body))
                 .isExactlyInstanceOf(MalformedResponseException.class)
                 .hasMessage("The sumCredit is not a number: '" + text + "'");
+    }
+
+    @Test
+    void should_reject_when_parsed_given_sum_without_currency() {
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumDebet>1.00</sumDebet></sum></sums>");
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The sum id is missing");
+    }
+
+    @Test
+    void should_reject_naming_the_code_when_parsed_given_sum_in_unknown_currency() {
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum id=\"XYZ\"><sumDebet>1.00</sumDebet></sum></sums>");
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The sum id is not an ISO 4217 currency code: 'XYZ'");
+    }
+
+    @Test
+    void should_compare_sums_by_value_when_parsed_given_amounts_at_another_scale() {
+        ImportResult result = parser.parse(response(
+                "<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumDebet>100.0</sumDebet></sum></sums>"));
+
+        assertThat(result.sums()).containsExactly(new Sum(CZK, Money.czk("100.00"), null));
     }
 }

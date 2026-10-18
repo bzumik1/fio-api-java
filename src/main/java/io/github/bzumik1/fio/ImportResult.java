@@ -2,7 +2,7 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
-import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -68,14 +68,24 @@ public record ImportResult(
     }
 
     /**
-     * The sums of the orders of a batch in one currency.
+     * The sums of the orders of a batch in one currency. The sums compare by value, like every {@link Money}.
      *
-     * @param currency the ISO 4217 code of the currency, as the bank names the sum, or {@code null} when it names
-     *        none
-     * @param debit the sum of the debit orders, or {@code null} when the bank left it out
-     * @param credit the sum of the credit orders, or {@code null} when the bank left it out
+     * @param currency the currency the bank names the sum by
+     * @param debit the sum of the debit orders in that currency, or {@code null} when the bank left it out
+     * @param credit the sum of the credit orders in that currency, or {@code null} when the bank left it out
      */
-    public record Sum(@Nullable String currency, @Nullable BigDecimal debit, @Nullable BigDecimal credit) {
+    public record Sum(Currency currency, @Nullable Money debit, @Nullable Money credit) {
+
+        /**
+         * Validates the currency.
+         *
+         * @param currency the currency
+         * @param debit the sum of the debit orders
+         * @param credit the sum of the credit orders
+         */
+        public Sum {
+            requireNonNull(currency, "currency");
+        }
     }
 
     /**
