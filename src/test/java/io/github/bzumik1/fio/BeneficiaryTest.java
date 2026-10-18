@@ -44,6 +44,12 @@ class BeneficiaryTest {
     }
 
     @Test
+    void should_reject_when_created_with_address_given_blank_name() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new Beneficiary("", "Gugitzgasse 2", "Wien", "AT"))
+                .withMessage("The beneficiary's name is blank");
+    }
+
+    @Test
     void should_keep_name_when_created_given_name_of_50_characters() {
         assertThat(Beneficiary.named("x".repeat(50)).name()).hasSize(50);
     }

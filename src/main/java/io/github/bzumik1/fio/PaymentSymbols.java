@@ -41,8 +41,9 @@ public record PaymentSymbols(@Nullable String variable, @Nullable String constan
     /**
      * Returns only a variable symbol.
      *
-     * @param variable the variable symbol
+     * @param variable the variable symbol, up to 10 digits
      * @return the symbols
+     * @throws IllegalArgumentException when the symbol is not 1 to 10 digits
      */
     public static PaymentSymbols ofVariable(String variable) {
         return new PaymentSymbols(variable, null, null);

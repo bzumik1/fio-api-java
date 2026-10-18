@@ -73,8 +73,9 @@ public record Money(BigDecimal amount, Currency currency) {
     /**
      * Creates an amount in Czech koruna.
      *
-     * @param amount the amount
+     * @param amount the amount, with a scale within {@code \u00b11000}
      * @return the money
+     * @throws IllegalArgumentException when the scale is outside that range
      */
     public static Money czk(BigDecimal amount) {
         return new Money(amount, CZK);
