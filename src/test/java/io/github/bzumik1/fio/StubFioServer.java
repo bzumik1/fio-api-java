@@ -37,7 +37,7 @@ final class StubFioServer implements AutoCloseable {
 
     private static final Duration BANK_INTERVAL = Duration.ofSeconds(30);
     private static final ZoneId PRAGUE = ZoneId.of("Europe/Prague");
-    private static final DateTimeFormatter CZECH_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final DateTimeFormatter CZECH_DATE = DateTimeFormatter.ofPattern("d.M.yyyy");
 
     record RecordedRequest(String method, String path, String accept) {
     }
@@ -128,8 +128,9 @@ final class StubFioServer implements AutoCloseable {
     }
 
     static String historyLockedBody(LocalDate earliestDay) {
-        return "Požadovaná data jsou starší 90 dní a přístup k nim nebyl silně autorizován."
-                + " Bez autorizace lze stáhnout pohyby nejdříve od " + CZECH_DATE.format(earliestDay) + ".";
+        return "Data není možné poskytnout bez silné autorizace. Pokyn k zobrazení dat si autorizujte ve Vašem"
+                + " Internetovém bankovnictví a data si vyžádejte znovu. Platnost ověření je 10 minut od autorizace."
+                + " Nebo požádejte o data, která nejsou starší jak 90 dnů (od " + CZECH_DATE.format(earliestDay) + ").";
     }
 
     URI baseUri() {

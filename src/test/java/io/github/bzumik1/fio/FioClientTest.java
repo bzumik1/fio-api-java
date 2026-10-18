@@ -581,6 +581,7 @@ class FioClientTest {
 
         assertThat(failure.statusCode()).hasValue(422);
         assertThat(failure.responseBody()).hasValue(StubFioServer.historyLockedBody(LocalDate.of(2026, 7, 19)));
+        assertThat(failure.earliestAvailableDay()).hasValue(LocalDate.of(2026, 7, 19));
         assertThat(failure).hasMessageContaining("90 days").hasMessageNotContaining(SECRET);
     }
 
