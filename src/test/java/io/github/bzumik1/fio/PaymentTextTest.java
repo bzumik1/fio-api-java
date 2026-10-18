@@ -59,7 +59,7 @@ class PaymentTextTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0.01", "100", "100.5", "100.50", "100.500", "1E+3"})
+    @ValueSource(strings = {"0.01", "100", "100.5", "100.50", "100.500", "1000.000"})
     void should_accept_when_amount_checked_given_positive_amount_with_at_most_two_decimals(String amount) {
         Money money = Money.czk(amount);
 

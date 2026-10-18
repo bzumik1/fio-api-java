@@ -11,7 +11,8 @@ import static java.util.Objects.requireNonNull;
  * The bank's answer to a submitted batch of payment orders. A batch the bank accepted still has to be authorised
  * by a person in Fio internet banking.
  *
- * @param errorCode 0 when the batch was accepted, else the code Fio's documentation lists
+ * @param errorCode 0 when the batch was accepted, 2 when accepted with warnings, else the code Fio's documentation
+ *        lists
  * @param status whether the batch was accepted, accepted with warnings, or refused
  * @param instructionId the id of the batch in the bank, when it was accepted
  * @param sums the sums of the orders, one for each currency of the batch

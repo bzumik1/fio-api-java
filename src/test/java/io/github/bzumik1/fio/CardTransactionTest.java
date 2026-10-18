@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 class CardTransactionTest {
 
     private static final LocalDate DATE = LocalDate.of(2012, 7, 19);
-    private static final BigDecimal AMOUNT = new BigDecimal("4700.0000");
+    private static final Money AMOUNT = Money.czk("4700.0000");
 
     @Test
     void should_leave_optional_components_empty_when_created_given_mandatory_components_only() {
@@ -36,10 +36,10 @@ class CardTransactionTest {
         assertThatNullPointerException().isThrownBy(() -> mandatoryOnly(DATE, null)).withMessage("amount");
     }
 
-    private static CardTransaction mandatoryOnly(LocalDate date, BigDecimal amount) {
+    private static CardTransaction mandatoryOnly(LocalDate date, Money amount) {
         return new CardTransaction(
                 9277937165L, 8216165940L, date, amount,
-                null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null);
     }
 }

@@ -21,7 +21,7 @@ class EuroPaymentTest {
     void should_carry_every_part_when_built_given_full_order() {
         assertThat(PaymentSamples.fullEuro()).isEqualTo(new EuroPayment(
                 DomesticAccount.parse("1234562"),
-                "AT611904300234573201",
+                new ForeignAccount("AT611904300234573201"),
                 "ABAGATWWXXX",
                 euro("100.00"),
                 new PaymentSymbols("1234567890", "0558", "1234567890"),
@@ -54,7 +54,7 @@ class EuroPaymentTest {
                 .bic(" abagatww ")
                 .build();
 
-        assertThat(payment.toIban()).isEqualTo("AT611904300234573201");
+        assertThat(payment.to()).isEqualTo(new ForeignAccount("AT611904300234573201"));
         assertThat(payment.bic()).isEqualTo("ABAGATWW");
     }
 
@@ -69,7 +69,7 @@ class EuroPaymentTest {
         assertThatIllegalStateException().isThrownBy(() -> EuroPayment.builder().build())
                 .withMessage("The payer's account is required");
         assertThatIllegalStateException().isThrownBy(() -> EuroPayment.builder().from("1234562").build())
-                .withMessage("The recipient's IBAN is required");
+                .withMessage("The recipient's account is required");
         assertThatIllegalStateException()
                 .isThrownBy(() -> EuroPayment.builder().from("1234562").to("AT611904300234573201").build())
                 .withMessage("The amount is required");
@@ -114,7 +114,7 @@ class EuroPaymentTest {
     @Test
     void should_keep_own_copy_of_remittance_lines_when_created_given_mutable_list() {
         List<String> lines = new ArrayList<>(List.of(" Rechnung 17 "));
-        EuroPayment payment = new EuroPayment(DomesticAccount.parse("1234562"), "AT611904300234573201", null,
+        EuroPayment payment = new EuroPayment(DomesticAccount.parse("1234562"), new ForeignAccount("AT611904300234573201"), null,
                 euro("1"), PaymentSymbols.none(), DUE, null, Beneficiary.named("Hans"), lines, null, EuroPayment.Type.STANDARD);
 
         lines.add("later");

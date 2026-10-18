@@ -19,8 +19,8 @@ class MerchantStatementTest {
     private static final String BIC = "FIOBCZPPXXX";
     private static final Currency CZK = Currency.getInstance("CZK");
     private static final CardTransaction TRANSACTION = new CardTransaction(
-            1L, 2L, LocalDate.of(2012, 7, 19), new BigDecimal("4700.0000"),
-            null, null, null, null, null, null, null, null, null, null,
+            1L, 2L, LocalDate.of(2012, 7, 19), Money.czk("4700.0000"),
+            null, null, null, null, null, null, null, null, null, null, null,
             null, null, null, null, null, null, null, null);
 
     @Test

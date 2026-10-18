@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -41,8 +42,8 @@ class PaymentImportWriterTest {
                   <accountFrom>1234562</accountFrom>
                   <currency>CZK</currency>
                   <amount>100.00</amount>
-                  <accountTo>2212-2000000699</accountTo>
-                  <bankCode>0300</bankCode>
+                  <accountTo>19-2000145399</accountTo>
+                  <bankCode>0800</bankCode>
                   <ks>0558</ks>
                   <vs>1234567890</vs>
                   <ss>0000000002</ss>
@@ -62,8 +63,8 @@ class PaymentImportWriterTest {
                   <accountFrom>1234562</accountFrom>
                   <currency>CZK</currency>
                   <amount>100.00</amount>
-                  <accountTo>2212-2000000699</accountTo>
-                  <bankCode>0300</bankCode>
+                  <accountTo>19-2000145399</accountTo>
+                  <bankCode>0800</bankCode>
                   <date>2026-10-20</date>
                   <paymentType>431001</paymentType>
                 </DomesticTransaction>
@@ -171,7 +172,7 @@ class PaymentImportWriterTest {
 
     @Test
     void should_write_amount_with_two_decimals_when_written_given_amount_of_other_scale() {
-        assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk("1E+3")).build()))
+        assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk(new BigDecimal("1E+3"))).build()))
                 .contains("<amount>1000.00</amount>");
         assertThat(written(PaymentSamples.domesticBuilder().amount(Money.czk("0.500")).build()))
                 .contains("<amount>0.50</amount>");

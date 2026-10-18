@@ -40,7 +40,7 @@ final class HttpPayments implements FioClient.Payments {
                 result.status(),
                 result.instructionId(),
                 result.sums(),
-                result.messages().stream().map(message -> numberedInBatch(message, fileOrder)).toList());
+                numberedInBatch(result.messages(), fileOrder));
     }
 
     @Override
@@ -54,17 +54,25 @@ final class HttpPayments implements FioClient.Payments {
         return http.parsed(response, parser::parse);
     }
 
-    private static Message numberedInBatch(Message message, List<Integer> fileOrder) {
-        Integer positionInFile = message.orderNumber();
-        if (positionInFile == null || positionInFile < 1 || positionInFile > fileOrder.size()) {
-            return message;
+    private static List<Message> numberedInBatch(List<Message> messages, List<Integer> fileOrder) {
+        boolean allPositionsFit = messages.stream()
+                .map(Message::orderNumber)
+                .allMatch(position -> position == null || (position >= 1 && position <= fileOrder.size()));
+        List<Message> numbered = new ArrayList<>(messages.size());
+        for (Message message : messages) {
+            Integer positionInFile = message.orderNumber();
+            Integer positionInBatch = positionInFile == null || !allPositionsFit
+                    ? null
+                    : fileOrder.get(positionInFile - 1) + 1;
+            numbered.add(new Message(positionInBatch, message.status(), message.text()));
         }
-        return new Message(fileOrder.get(positionInFile - 1) + 1, message.status(), message.text());
+        return numbered;
     }
 
     private final class Batch implements FioClient.BatchRequest {
 
         private final List<PaymentOrder> orders = new ArrayList<>();
+        private boolean submitted;
 
         @Override
         public FioClient.BatchRequest domestic(Consumer<DomesticPayment.Builder> order) {
@@ -89,9 +97,13 @@ final class HttpPayments implements FioClient.Payments {
 
         @Override
         public ImportResult submit() {
+            if (submitted) {
+                throw new IllegalStateException("The batch was already submitted; build a new one to submit again");
+            }
             if (orders.isEmpty()) {
                 throw new IllegalStateException("The batch holds no payment order to submit");
             }
+            submitted = true;
             return HttpPayments.this.submit(new PaymentBatch(orders));
         }
 

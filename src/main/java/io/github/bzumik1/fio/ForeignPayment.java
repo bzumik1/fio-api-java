@@ -16,7 +16,7 @@ import static java.util.Objects.requireNonNull;
  * A payment abroad outside SEPA.
  *
  * @param from the payer's account
- * @param toAccount the recipient's account, an IBAN or a local account number, up to 34 characters
+ * @param to the recipient's account, an IBAN or a local account number of up to 34 characters
  * @param bic the BIC of the recipient's bank
  * @param amount the amount, in the currency of the payer's account
  * @param date the day the payment is due
@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
  */
 public record ForeignPayment(
         DomesticAccount from,
-        String toAccount,
+        ForeignAccount to,
         String bic,
         Money amount,
         LocalDate date,
@@ -44,7 +44,7 @@ public record ForeignPayment(
      * Validates the components.
      *
      * @param from the payer's account
-     * @param toAccount the recipient's account
+     * @param to the recipient's account
      * @param bic the BIC
      * @param amount the amount
      * @param date the due date
@@ -60,7 +60,7 @@ public record ForeignPayment(
      */
     public ForeignPayment {
         from = payerAccount(from);
-        toAccount = required(requireNonNull(toAccount, "toAccount").replace(" ", ""), 34, "recipient's account");
+        to = new ForeignAccount(required(requireNonNull(to, "to").identifier().replace(" ", ""), 34, "recipient's account"));
         bic = PaymentText.bic(bic);
         amount = positive(amount);
         requireNonNull(date, "date");
@@ -121,7 +121,7 @@ public record ForeignPayment(
     public static final class Builder {
 
         private @Nullable DomesticAccount from;
-        private @Nullable String toAccount;
+        private @Nullable ForeignAccount to;
         private @Nullable String bic;
         private @Nullable Money amount;
         private @Nullable LocalDate date;
@@ -162,7 +162,17 @@ public record ForeignPayment(
          * @return this builder
          */
         public Builder to(String account) {
-            this.toAccount = requireNonNull(account, "account");
+            return to(new ForeignAccount(account));
+        }
+
+        /**
+         * Sets the recipient's account.
+         *
+         * @param account the account, by IBAN or a local account number
+         * @return this builder
+         */
+        public Builder to(ForeignAccount account) {
+            this.to = requireNonNull(account, "account");
             return this;
         }
 
@@ -264,7 +274,7 @@ public record ForeignPayment(
         public ForeignPayment build() {
             return new ForeignPayment(
                     required(from, "payer's account"),
-                    required(toAccount, "recipient's account"),
+                    required(to, "recipient's account"),
                     required(bic, "BIC"),
                     required(amount, "amount"),
                     required(date, "date"),

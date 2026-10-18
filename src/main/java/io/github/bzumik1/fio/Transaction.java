@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * @param payerReference the payer's reference (column 27)
  * @param columns every column the bank sent, by its id
  */
-public record FioTransaction(
+public record Transaction(
         long id,
         LocalDate date,
         Money amount,
@@ -47,7 +47,7 @@ public record FioTransaction(
         @Nullable String detail,
         @Nullable String comment,
         @Nullable String payerReference,
-        Map<Integer, FioColumn> columns) {
+        Map<Integer, TransactionColumn> columns) {
 
     /**
      * Validates the mandatory components and copies the columns.
@@ -68,7 +68,7 @@ public record FioTransaction(
      * @param payerReference the payer's reference
      * @param columns the raw columns
      */
-    public FioTransaction {
+    public Transaction {
         requireNonNull(date, "date");
         requireNonNull(amount, "amount");
         requireNonNull(type, "type");

@@ -20,7 +20,7 @@ class DomesticPaymentTest {
 
         assertThat(payment).isEqualTo(new DomesticPayment(
                 DomesticAccount.parse("1234562"),
-                DomesticAccount.parse("2212-2000000699/0300"),
+                DomesticAccount.parse("19-2000145399/0800"),
                 Money.czk("100.00"),
                 new PaymentSymbols("1234567890", "0558", "0000000002"),
                 DUE,

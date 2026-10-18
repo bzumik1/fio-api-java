@@ -64,7 +64,7 @@ class MerchantStatementParserTest {
                         9277937165L,
                         8216165940L,
                         LocalDate.of(2012, 7, 19),
-                        new BigDecimal("4700.0000"),
+                        Money.czk("4700.0000"),
                         "Zaúčtování POS terminálů MasterCard, Operace ON-US",
                         "Pobocka 1",
                         28L,
@@ -73,13 +73,14 @@ class MerchantStatementParserTest {
                         "997476",
                         "553937******9052",
                         Money.czk("200.0000"),
+                        CardTransactionType.ON_US,
                         "ON_US",
                         "MASTERCARD",
-                        new BigDecimal("0.0000"),
-                        new BigDecimal("1.3"),
-                        new BigDecimal("0.0000"),
-                        new BigDecimal("0.25"),
-                        new BigDecimal("1.84"),
+                        Money.czk("0.0000"),
+                        Money.czk("1.3"),
+                        Money.czk("0.0000"),
+                        Money.czk("0.25"),
+                        Money.czk("1.84"),
                         true,
                         LocalDate.of(2012, 7, 19),
                         null))));
@@ -96,12 +97,13 @@ class MerchantStatementParserTest {
         assertThat(statement.transactions()).hasSize(2);
         assertThat(statement.transactions().get(0))
                 .returns(8216165941L, CardTransaction::operationId)
-                .returns(new BigDecimal("-12.50"), CardTransaction::amount)
+                .returns(Money.of("-12.50", "EUR"), CardTransaction::amount)
                 .returns(OffsetDateTime.parse("2026-01-04T23:59:59.250Z"), CardTransaction::transactionDateTime)
                 .returns(Money.of("-12.50", "EUR"), CardTransaction::transactionAmount)
-                .returns("FOREIGN", CardTransaction::type)
+                .returns(CardTransactionType.FOREIGN, CardTransaction::type)
+                .returns("FOREIGN", CardTransaction::typeLabel)
                 .returns("VISA", CardTransaction::cardIssuer)
-                .returns(new BigDecimal("0.10"), CardTransaction::cardAssociationFee)
+                .returns(Money.of("0.10", "EUR"), CardTransaction::cardAssociationFee)
                 .returns(false, CardTransaction::settled)
                 .returns("12345678911234567891", CardTransaction::variableSymbol);
     }
@@ -111,8 +113,8 @@ class MerchantStatementParserTest {
         CardTransaction transaction = parser.parse(Fixtures.read(MERCHANT_SCHEMA_EXAMPLE)).transactions().get(1);
 
         assertThat(transaction).isEqualTo(new CardTransaction(
-                8216165942L, 9277937167L, LocalDate.of(2026, 1, 6), new BigDecimal("0"),
-                null, null, null, null, null, null, null, null, null, null,
+                8216165942L, 9277937167L, LocalDate.of(2026, 1, 6), Money.of("0", "EUR"),
+                null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null));
     }
 

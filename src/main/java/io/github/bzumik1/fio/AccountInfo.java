@@ -27,7 +27,7 @@ import static java.util.Objects.requireNonNull;
  * @param lastTransactionId the id of the last movement in the download
  * @param bookmarkTransactionId the id of the movement the bookmark pointed at before this download
  */
-public record FioAccountInfo(
+public record AccountInfo(
         DomesticAccount account,
         String iban,
         String bic,
@@ -56,13 +56,18 @@ public record FioAccountInfo(
      * @param firstTransactionId the first movement id
      * @param lastTransactionId the last movement id
      * @param bookmarkTransactionId the bookmark id
+     * @throws IllegalArgumentException when a balance is not in the account's currency
      */
-    public FioAccountInfo {
+    public AccountInfo {
         requireNonNull(account, "account");
         requireNonNull(iban, "iban");
         requireNonNull(bic, "bic");
         requireNonNull(currency, "currency");
         requireNonNull(openingBalance, "openingBalance");
         requireNonNull(closingBalance, "closingBalance");
+        if (!openingBalance.currency().equals(currency) || !closingBalance.currency().equals(currency)) {
+            throw new IllegalArgumentException("The balances are in " + openingBalance.currency() + " and "
+                    + closingBalance.currency() + ", not in the account's " + currency);
+        }
     }
 }

@@ -31,10 +31,10 @@ class ValueObjectsTest {
         assertThat(new Counterparty(null, null, "Fio banka", null).isEmpty()).isFalse();
         assertThat(new Counterparty(null, null, null, "FIOBCZPP").isEmpty()).isFalse();
         assertThat(PaymentSymbols.none().isEmpty()).isTrue();
-        assertThat(PaymentSymbols.variable("0558").isEmpty()).isFalse();
+        assertThat(PaymentSymbols.ofVariable("0558").isEmpty()).isFalse();
         assertThat(new PaymentSymbols(null, "0558", null).isEmpty()).isFalse();
         assertThat(new PaymentSymbols(null, null, "1").isEmpty()).isFalse();
-        assertThat(PaymentSymbols.variable("0558")).isEqualTo(new PaymentSymbols("0558", null, null));
+        assertThat(PaymentSymbols.ofVariable("0558")).isEqualTo(new PaymentSymbols("0558", null, null));
     }
 
     @ParameterizedTest
@@ -66,23 +66,24 @@ class ValueObjectsTest {
     void should_read_bank_format_when_parsed_given_statement_number_text() {
         assertThat(StatementId.parse("2026,10\n")).isEqualTo(new StatementId(2026, 10));
         assertThatThrownBy(() -> StatementId.parse("2026/10")).isInstanceOf(MalformedResponseException.class);
-        assertThatThrownBy(() -> StatementId.parse("2026,0")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> StatementId.parse("2026,0")).isInstanceOf(MalformedResponseException.class);
     }
 
     @Test
     void should_copy_content_when_created_and_read_given_document() {
         byte[] bytes = "ahoj".getBytes(StandardCharsets.UTF_8);
-        FioDocument document = new FioDocument("text/plain", bytes);
+        Download document = new Download("text/plain", StandardCharsets.UTF_8, bytes);
         bytes[0] = 'x';
 
         assertThat(document.asText()).isEqualTo("ahoj");
         document.content()[0] = 'y';
         assertThat(document.asText()).isEqualTo("ahoj");
-        assertThat(document).hasToString("FioDocument[text/plain, 4 bytes]")
-                .isEqualTo(new FioDocument("text/plain", "ahoj".getBytes(StandardCharsets.UTF_8)))
-                .hasSameHashCodeAs(new FioDocument("text/plain", "ahoj".getBytes(StandardCharsets.UTF_8)))
-                .isNotEqualTo(new FioDocument("text/csv", "ahoj".getBytes(StandardCharsets.UTF_8)))
-                .isNotEqualTo(new FioDocument("text/plain", "ahoi".getBytes(StandardCharsets.UTF_8)))
+        assertThat(document).hasToString("Download[text/plain, UTF-8, 4 bytes]")
+                .isEqualTo(new Download("text/plain", StandardCharsets.UTF_8, "ahoj".getBytes(StandardCharsets.UTF_8)))
+                .hasSameHashCodeAs(new Download("text/plain", StandardCharsets.UTF_8, "ahoj".getBytes(StandardCharsets.UTF_8)))
+                .isNotEqualTo(new Download("text/csv", StandardCharsets.UTF_8, "ahoj".getBytes(StandardCharsets.UTF_8)))
+                .isNotEqualTo(new Download("text/plain", StandardCharsets.UTF_8, "ahoi".getBytes(StandardCharsets.UTF_8)))
+                .isNotEqualTo(new Download("text/plain", StandardCharsets.ISO_8859_1, "ahoj".getBytes(StandardCharsets.UTF_8)))
                 .isNotEqualTo("ahoj");
     }
 
@@ -90,10 +91,12 @@ class ValueObjectsTest {
     void should_decode_with_named_charset_when_read_given_media_type_with_charset() {
         byte[] windows1250 = "Příjem".getBytes(Charset.forName("windows-1250"));
 
-        assertThat(new FioDocument("text/csv; charset=windows-1250", windows1250).asText()).isEqualTo("Příjem");
-        assertThat(new FioDocument("text/csv;charset=\"windows-1250\"", windows1250).charset()).isEqualTo(Charset.forName("windows-1250"));
-        assertThat(new FioDocument("text/csv", windows1250).charset()).isEqualTo(StandardCharsets.UTF_8);
-        assertThat(new FioDocument("text/csv;charset=nonsense-9", windows1250).charset()).isEqualTo(StandardCharsets.UTF_8);
+        Charset documented = Charset.forName("windows-1250");
+
+        assertThat(Download.of("text/csv; charset=windows-1250", StandardCharsets.UTF_8, windows1250).asText()).isEqualTo("Příjem");
+        assertThat(Download.of("text/csv;charset=\"windows-1250\"", StandardCharsets.UTF_8, windows1250).charset()).isEqualTo(documented);
+        assertThat(Download.of("text/csv", documented, windows1250).charset()).isEqualTo(documented);
+        assertThat(Download.of("text/csv;charset=nonsense-9", documented, windows1250).charset()).isEqualTo(documented);
     }
 
     @ParameterizedTest

@@ -18,6 +18,13 @@ public sealed interface PaymentOrder permits DomesticPayment, EuroPayment, Forei
     DomesticAccount from();
 
     /**
+     * Returns the recipient's account.
+     *
+     * @return the account the payment goes to
+     */
+    BankAccount to();
+
+    /**
      * Returns the amount; its currency has to be the currency of the payer's account.
      *
      * @return the amount

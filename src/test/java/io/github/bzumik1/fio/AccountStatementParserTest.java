@@ -17,19 +17,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
-class FioStatementParserTest {
+class AccountStatementParserTest {
 
     private static final String MINIMAL_INFO = """
             {"accountId":"2400222222","currency":"CZK","iban":"CZ7920100000002400222222","bic":"FIOBCZPPXXX",\
             "openingBalance":10.00,"closingBalance":11.00}""";
 
-    private final FioStatementParser parser = new FioStatementParser();
+    private final AccountStatementParser parser = new AccountStatementParser();
 
     @Test
     void should_map_info_block_when_parsed_given_periods_statement() {
-        FioStatement statement = parser.parse(Fixtures.read(PERIODS_STATEMENT));
+        AccountStatement statement = parser.parse(Fixtures.read(PERIODS_STATEMENT));
 
-        assertThat(statement.info()).isEqualTo(new FioAccountInfo(
+        assertThat(statement.info()).isEqualTo(new AccountInfo(
                 DomesticAccount.parse("2400222222/2010"),
                 "CZ7920100000002400222222",
                 "FIOBCZPPXXX",
@@ -46,42 +46,42 @@ class FioStatementParserTest {
 
     @Test
     void should_map_every_known_column_when_parsed_given_fully_filled_transaction() {
-        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
+        Transaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
 
         assertThat(transaction)
-                .returns(1148734530L, FioTransaction::id)
-                .returns(LocalDate.of(2012, 6, 26), FioTransaction::date)
-                .returns(Money.czk("1.00"), FioTransaction::amount)
+                .returns(1148734530L, Transaction::id)
+                .returns(LocalDate.of(2012, 6, 26), Transaction::date)
+                .returns(Money.czk("1.00"), Transaction::amount)
                 .returns(new Counterparty(DomesticAccount.parse("2900233333/2010"), "Pavel, Novák", "Fio banka, a.s.", "UNCRITMMXXX"),
-                        FioTransaction::counterparty)
-                .returns(new PaymentSymbols("1234567890", "0558", "0002"), FioTransaction::symbols)
-                .returns("Nákup: PENNY MARKET s.r.o., Jaromer, CZ", FioTransaction::userIdentification)
-                .returns(TransactionType.INCOMING_TRANSFER_WITHIN_BANK, FioTransaction::type)
-                .returns("Příjem převodem uvnitř banky", FioTransaction::typeLabel)
-                .returns("Béďa Trávníček", FioTransaction::executedBy)
-                .returns("Libovolný text, který se zobrazí příjemci platby", FioTransaction::messageForRecipient)
-                .returns(2105685816L, FioTransaction::instructionId)
-                .returns("15.90 EUR", FioTransaction::detail)
-                .returns("Hračky pro děti v PENNY MARKET", FioTransaction::comment)
-                .returns("2000000003", FioTransaction::payerReference)
-                .returns(true, FioTransaction::isIncoming)
-                .returns(false, FioTransaction::isOutgoing);
+                        Transaction::counterparty)
+                .returns(new PaymentSymbols("1234567890", "0558", "0002"), Transaction::symbols)
+                .returns("Nákup: PENNY MARKET s.r.o., Jaromer, CZ", Transaction::userIdentification)
+                .returns(TransactionType.INCOMING_TRANSFER_WITHIN_BANK, Transaction::type)
+                .returns("Příjem převodem uvnitř banky", Transaction::typeLabel)
+                .returns("Béďa Trávníček", Transaction::executedBy)
+                .returns("Libovolný text, který se zobrazí příjemci platby", Transaction::messageForRecipient)
+                .returns(2105685816L, Transaction::instructionId)
+                .returns("15.90 EUR", Transaction::detail)
+                .returns("Hračky pro děti v PENNY MARKET", Transaction::comment)
+                .returns("2000000003", Transaction::payerReference)
+                .returns(true, Transaction::isIncoming)
+                .returns(false, Transaction::isOutgoing);
     }
 
     @Test
     void should_keep_minus_sign_and_scale_when_parsed_given_outgoing_and_small_amounts() {
-        List<FioTransaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
+        List<Transaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
 
-        assertThat(transactions).extracting(FioTransaction::amount)
+        assertThat(transactions).extracting(Transaction::amount)
                 .containsExactly(Money.czk("1.00"), Money.czk("-1.00"), Money.czk("0.01"));
         assertThat(transactions.get(1).isOutgoing()).isTrue();
     }
 
     @Test
     void should_leave_optional_fields_null_when_parsed_given_null_or_blank_columns() {
-        List<FioTransaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
-        FioTransaction outgoing = transactions.get(1);
-        FioTransaction interest = transactions.get(2);
+        List<Transaction> transactions = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions();
+        Transaction outgoing = transactions.get(1);
+        Transaction interest = transactions.get(2);
 
         assertThat(outgoing.counterparty().name()).isNull();
         assertThat(outgoing.counterparty().bic()).isNull();
@@ -89,53 +89,53 @@ class FioStatementParserTest {
         assertThat(outgoing.userIdentification()).isNull();
         assertThat(outgoing.comment()).isNull();
         assertThat(interest)
-                .returns(Counterparty.none(), FioTransaction::counterparty)
-                .returns(PaymentSymbols.none(), FioTransaction::symbols)
-                .returns(null, FioTransaction::executedBy)
-                .returns(null, FioTransaction::messageForRecipient)
-                .returns(null, FioTransaction::detail)
-                .returns(null, FioTransaction::payerReference)
-                .returns(TransactionType.INTEREST_CREDITED, FioTransaction::type)
-                .returns(2107642322L, FioTransaction::instructionId);
+                .returns(Counterparty.none(), Transaction::counterparty)
+                .returns(PaymentSymbols.none(), Transaction::symbols)
+                .returns(null, Transaction::executedBy)
+                .returns(null, Transaction::messageForRecipient)
+                .returns(null, Transaction::detail)
+                .returns(null, Transaction::payerReference)
+                .returns(TransactionType.INTEREST_CREDITED, Transaction::type)
+                .returns(2107642322L, Transaction::instructionId);
     }
 
     @Test
     void should_keep_raw_columns_when_parsed_given_values_the_typed_fields_normalise() {
-        FioTransaction outgoing = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(1);
+        Transaction outgoing = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(1);
 
         assertThat(outgoing.columns())
-                .containsEntry(0, new FioColumn(0, "Datum", "2012-06-26+0200"))
-                .containsEntry(1, new FioColumn(1, "Objem", "-1.00"))
-                .containsEntry(7, new FioColumn(7, "Uživatelská identifikace", " "))
-                .containsEntry(22, new FioColumn(22, "ID pohybu", "1148734781"))
+                .containsEntry(0, new TransactionColumn(0, "Datum", "2012-06-26+0200"))
+                .containsEntry(1, new TransactionColumn(1, "Objem", "-1.00"))
+                .containsEntry(7, new TransactionColumn(7, "Uživatelská identifikace", " "))
+                .containsEntry(22, new TransactionColumn(22, "ID pohybu", "1148734781"))
                 .doesNotContainKeys(5, 6, 10, 16, 18, 26);
         assertThat(List.copyOf(outgoing.columns().keySet())).isSorted();
     }
 
     @Test
     void should_keep_unknown_column_when_parsed_given_column_the_model_does_not_know() {
-        FioTransaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
+        Transaction transaction = parser.parse(Fixtures.read(PERIODS_STATEMENT)).transactions().get(0);
 
-        assertThat(transaction.columns()).containsEntry(30, new FioColumn(30, "Budoucí sloupec", "budoucí hodnota"));
+        assertThat(transaction.columns()).containsEntry(30, new TransactionColumn(30, "Budoucí sloupec", "budoucí hodnota"));
     }
 
     @Test
     void should_read_dates_in_prague_time_when_parsed_given_documentation_example_with_epoch_milliseconds() {
-        FioStatement statement = parser.parse(Fixtures.read(DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES));
+        AccountStatement statement = parser.parse(Fixtures.read(DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES));
 
         assertThat(statement.info().dateStart()).isEqualTo(LocalDate.of(2012, 6, 26));
         assertThat(statement.info().dateEnd()).isEqualTo(LocalDate.of(2012, 6, 30));
-        assertThat(statement.transactions()).extracting(FioTransaction::date)
+        assertThat(statement.transactions()).extracting(Transaction::date)
                 .containsExactly(LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 30));
     }
 
     @Test
     void should_map_documentation_example_like_the_string_dated_fixture_when_parsed_given_epoch_milliseconds() {
-        FioStatement documentationExample = parser.parse(Fixtures.read(DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES));
+        AccountStatement documentationExample = parser.parse(Fixtures.read(DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES));
 
         assertThat(documentationExample.transactions())
-                .extracting(FioTransaction::id, FioTransaction::amount, transaction -> transaction.counterparty().name(),
-                        FioTransaction::instructionId)
+                .extracting(Transaction::id, Transaction::amount, transaction -> transaction.counterparty().name(),
+                        Transaction::instructionId)
                 .containsExactly(
                         tuple(1148734530L, Money.czk("1.00"), "Pavel, Novák", 2105685816L),
                         tuple(1148734781L, Money.czk("-1.00"), null, 2105687343L),
@@ -152,7 +152,7 @@ class FioStatementParserTest {
             "2012-01-15, 2012-01-15"
     })
     void should_take_calendar_date_when_parsed_given_date_with_or_without_offset(String raw, LocalDate expected) {
-        FioStatement statement = parser.parse(statementWith(MINIMAL_INFO, transaction(replacing(0, "\"" + raw + "\""))));
+        AccountStatement statement = parser.parse(statementWith(MINIMAL_INFO, transaction(replacing(0, "\"" + raw + "\""))));
 
         assertThat(statement.transactions().get(0).date()).isEqualTo(expected);
     }
@@ -164,16 +164,16 @@ class FioStatementParserTest {
                 "bic":"FIOBCZPPXXX","openingBalance":185.05,"closingBalance":185.05,"dateStart":null,"dateEnd":null,\
                 "yearList":null,"idList":null,"idFrom":null,"idTo":null,"idLastDownload":1150392361}""";
 
-        FioStatement statement = parser.parse(statementWith(info, null));
+        AccountStatement statement = parser.parse(statementWith(info, null));
 
         assertThat(statement.transactions()).isEmpty();
         assertThat(statement.info())
-                .returns(null, FioAccountInfo::dateStart)
-                .returns(null, FioAccountInfo::dateEnd)
-                .returns(null, FioAccountInfo::statement)
-                .returns(null, FioAccountInfo::firstTransactionId)
-                .returns(null, FioAccountInfo::lastTransactionId)
-                .returns(1150392361L, FioAccountInfo::bookmarkTransactionId);
+                .returns(null, AccountInfo::dateStart)
+                .returns(null, AccountInfo::dateEnd)
+                .returns(null, AccountInfo::statement)
+                .returns(null, AccountInfo::firstTransactionId)
+                .returns(null, AccountInfo::lastTransactionId)
+                .returns(1150392361L, AccountInfo::bookmarkTransactionId);
     }
 
     @ParameterizedTest
@@ -272,13 +272,13 @@ class FioStatementParserTest {
         columns.add("\"other\":{\"name\":\"Cizí klíč\",\"value\":\"e\"}");
         columns.add("\"column34\":\"not an object\"");
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.columns())
-                .containsEntry(30, new FioColumn(30, "Bez id", "a"))
-                .containsEntry(31, new FioColumn(31, "Textové id", "b"))
-                .containsEntry(32, new FioColumn(32, "Příliš velké id", "c"))
-                .containsEntry(33, new FioColumn(33, "Desetinné id", "d"))
+                .containsEntry(30, new TransactionColumn(30, "Bez id", "a"))
+                .containsEntry(31, new TransactionColumn(31, "Textové id", "b"))
+                .containsEntry(32, new TransactionColumn(32, "Příliš velké id", "c"))
+                .containsEntry(33, new TransactionColumn(33, "Desetinné id", "d"))
                 .doesNotContainKeys(34)
                 .hasSize(mandatoryColumns().size() + 4);
     }
@@ -291,20 +291,20 @@ class FioStatementParserTest {
         columns.add("\"column42\":{\"id\":42,\"name\":\"Číslo\",\"value\":1.50}");
         columns.add("\"column43\":{\"id\":43,\"value\":\"bez názvu\"}");
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.columns())
-                .containsEntry(40, new FioColumn(40, "Pravda", "true"))
-                .containsEntry(41, new FioColumn(41, "Objekt", "{\"a\":1}"))
-                .containsEntry(42, new FioColumn(42, "Číslo", "1.50"))
-                .containsEntry(43, new FioColumn(43, null, "bez názvu"));
+                .containsEntry(40, new TransactionColumn(40, "Pravda", "true"))
+                .containsEntry(41, new TransactionColumn(41, "Objekt", "{\"a\":1}"))
+                .containsEntry(42, new TransactionColumn(42, "Číslo", "1.50"))
+                .containsEntry(43, new TransactionColumn(43, null, "bez názvu"));
     }
 
     @Test
     void should_read_statement_number_when_parsed_given_official_statement() {
         String info = MINIMAL_INFO.replace("}", ",\"yearList\":2012,\"idList\":4}");
 
-        FioStatement statement = parser.parse(statementWith(info, null));
+        AccountStatement statement = parser.parse(statementWith(info, null));
 
         assertThat(statement.info().statement()).isEqualTo(new StatementId(2012, 4));
     }
@@ -327,7 +327,7 @@ class FioStatementParserTest {
 
     @Test
     void should_keep_account_without_bank_code_when_parsed_given_info_without_bank_id() {
-        FioStatement statement = parser.parse(statementWith(MINIMAL_INFO, null));
+        AccountStatement statement = parser.parse(statementWith(MINIMAL_INFO, null));
 
         assertThat(statement.info().account()).isEqualTo(new DomesticAccount(null, "2400222222", null));
     }
@@ -347,7 +347,7 @@ class FioStatementParserTest {
         columns.add(column(2, "Protiúčet", "\"19-2000145399\""));
         columns.add(column(3, "Kód banky", "\"0800\""));
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.counterparty().account()).isEqualTo(DomesticAccount.parse("19-2000145399/0800"));
     }
@@ -385,7 +385,7 @@ class FioStatementParserTest {
         columns.add(column(5, "VS", "\"0\""));
         columns.set(4, column(8, "Typ", "\"Něco nového\""));
 
-        FioTransaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
+        Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.symbols().variable()).isEqualTo("0");
         assertThat(transaction.type()).isEqualTo(TransactionType.OTHER);

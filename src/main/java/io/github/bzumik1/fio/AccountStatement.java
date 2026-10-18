@@ -10,7 +10,7 @@ import static java.util.Objects.requireNonNull;
  * @param info the account and the period or statement the download covers
  * @param transactions the movements, oldest first as the bank sends them
  */
-public record FioStatement(FioAccountInfo info, List<FioTransaction> transactions) {
+public record AccountStatement(AccountInfo info, List<Transaction> transactions) {
 
     /**
      * Validates the components and copies the movements.
@@ -18,7 +18,7 @@ public record FioStatement(FioAccountInfo info, List<FioTransaction> transaction
      * @param info the info block
      * @param transactions the movements
      */
-    public FioStatement {
+    public AccountStatement {
         requireNonNull(info, "info");
         transactions = List.copyOf(transactions);
     }

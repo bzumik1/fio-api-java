@@ -8,8 +8,10 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,6 +20,10 @@ final class MerchantStatementParser {
 
     private static final String ROOT = "MerchantStatement";
     private static final int MAXIMUM_DEPTH = 16;
+
+    MerchantStatement parse(byte[] xml) {
+        return parse(new String(xml, StandardCharsets.UTF_8));
+    }
 
     MerchantStatement parse(String xml) {
         Element root = read(xml);
@@ -34,15 +40,16 @@ final class MerchantStatementParser {
 
     private static MerchantStatement statement(Element info, List<Element> transactions) {
         Fields field = new Fields("Info", info);
+        Currency currency = field.value("currency").requiredCurrency();
         List<CardTransaction> parsed = new ArrayList<>();
         for (int index = 0; index < transactions.size(); index++) {
-            parsed.add(transaction(new Fields("Transaction[" + (index + 1) + "]", transactions.get(index))));
+            parsed.add(transaction(new Fields("Transaction[" + (index + 1) + "]", transactions.get(index)), currency));
         }
         return new MerchantStatement(
                 account(field.value("accountId"), field.value("bankId")),
                 field.value("iban").requiredText(),
                 field.value("bic").requiredText(),
-                field.value("currency").requiredCurrency(),
+                currency,
                 field.value("dateStart").optionalDate(),
                 field.value("dateEnd").optionalDate(),
                 parsed);
@@ -58,12 +65,13 @@ final class MerchantStatementParser {
         }
     }
 
-    private static CardTransaction transaction(Fields field) {
+    private static CardTransaction transaction(Fields field, Currency currency) {
+        String typeLabel = field.value("type").optionalText();
         return new CardTransaction(
                 field.value("operationId").requiredLong(),
                 field.value("orderId").requiredLong(),
                 field.value("date").requiredDate(),
-                field.value("amount").requiredDecimal(),
+                new Money(field.value("amount").requiredDecimal(), currency),
                 field.value("note").optionalText(),
                 field.value("branchName").optionalText(),
                 field.value("transactionId").optionalLong(),
@@ -72,16 +80,22 @@ final class MerchantStatementParser {
                 field.value("autorizationNumber").optionalText(),
                 field.value("cardNumber").optionalText(),
                 transactionAmount(field.value("transactionAmount"), field.value("transactionCurrency")),
-                field.value("type").optionalText(),
+                CardTransactionType.fromOptionalLabel(typeLabel),
+                typeLabel,
                 field.value("cardIssuer").optionalText(),
-                field.value("totalFees").optionalDecimal(),
-                field.value("fioFee").optionalDecimal(),
-                field.value("interchangeFee").optionalDecimal(),
-                field.value("cardAssociationFee", "cardAsosiationFee").optionalDecimal(),
-                field.value("flexibleCommission").optionalDecimal(),
+                money(field.value("totalFees"), currency),
+                money(field.value("fioFee"), currency),
+                money(field.value("interchangeFee"), currency),
+                money(field.value("cardAssociationFee", "cardAsosiationFee"), currency),
+                money(field.value("flexibleCommission"), currency),
                 field.value("settlement").optionalBoolean(),
                 field.value("settlementDate").optionalDate(),
                 field.value("vs", "VS").optionalText());
+    }
+
+    private static @Nullable Money money(RawValue value, Currency currency) {
+        BigDecimal amount = value.optionalDecimal();
+        return amount == null ? null : new Money(amount, currency);
     }
 
     private static @Nullable Money transactionAmount(RawValue amount, RawValue currency) {

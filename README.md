@@ -9,7 +9,8 @@ the bank offers, the server-side bookmark, a merchant's card transactions, and t
 - A fluent API over immutable records, with [JSpecify](https://jspecify.dev) nullness annotations.
 - The bank's one-request-per-30-seconds limit is handled by the client, which waits for the next slot instead of
   failing.
-- The token never appears in a log, a message or an exception.
+- The token never appears in a message, a `toString()` or an exception this library creates. Fio's API puts it in
+  the URL path of every download, so it is in the request line your HTTP logging or proxy sees.
 - Every line and branch is covered by tests, which run against an in-process stub of the bank.
 
 ```kotlin
@@ -31,8 +32,8 @@ dependencies {
 ```java
 FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_TOKEN")).build();
 
-FioStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
-for (FioTransaction transaction : statement.transactions()) {
+AccountStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
+for (Transaction transaction : statement.transactions()) {
     if (transaction.amount().isPositive()) {
         System.out.println(transaction.date() + " " + transaction.amount()
                 + " VS " + transaction.symbols().variable()
@@ -44,23 +45,23 @@ for (FioTransaction transaction : statement.transactions()) {
 ### Movements
 
 ```java
-FioStatement january = fio.transactions().between(from, to).fetch();
-FioStatement sinceLastTime = fio.transactions().sinceBookmark().fetch();
-FioDocument csv = fio.transactions().between(from, to).download(TransactionFormat.CSV);
+AccountStatement january = fio.transactions().between(from, to).fetch();
+AccountStatement sinceLastTime = fio.transactions().sinceBookmark().fetch();
+Download csv = fio.transactions().between(from, to).download(TransactionFormat.CSV);
 ```
 
 `between` downloads the movements dated within a period, both ends included. `sinceBookmark` downloads the
 movements after the bank's bookmark and moves the bookmark to the newest movement it returns; an empty answer
 leaves it where it was. `fetch()` returns typed records from the JSON format; `download(format)` returns the
 bank's answer as it came, in one of `TransactionFormat`'s six formats (CSV, GPC, HTML, JSON, OFX, XML) as a
-`FioDocument` with its media type and bytes.
+`Download` with its media type and bytes.
 
 ### Official statements
 
 ```java
 StatementId latest = fio.statements().latest().id();
-FioStatement statement = fio.statements().latest().fetch();
-FioDocument pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
+AccountStatement statement = fio.statements().latest().fetch();
+Download pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
 ```
 
 A statement comes typed from its JSON format or raw in any of `StatementFormat`'s ten formats, which add PDF,
@@ -79,7 +80,7 @@ Both move the bookmark `sinceBookmark()` continues from: behind a movement, or t
 
 ```java
 MerchantStatement cards = fio.merchant().between(from, to).fetch();
-FioDocument csv = fio.merchant().between(from, to).download(MerchantFormat.CSV);
+Download csv = fio.merchant().between(from, to).download(MerchantFormat.CSV);
 ```
 
 ### Payment orders
@@ -90,6 +91,7 @@ ImportResult result = fio.payments().batch()
                 .from("2400222222/2010")
                 .to("19-2000145399/0800")
                 .amount(Money.czk("1250.00"))
+                .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .variableSymbol("20260001")
                 .messageForRecipient("Invoice 2026-0001"))
         .euro(payment -> payment
@@ -97,6 +99,7 @@ ImportResult result = fio.payments().batch()
                 .to("AT611904300234573201")
                 .bic("ABAGATWWXXX")
                 .amount(Money.of("99.90", "EUR"))
+                .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .beneficiary(Beneficiary.named("Example GmbH")))
         .submit();
 
@@ -113,7 +116,13 @@ pain.008).
 
 A submitted batch is only accepted: the bank processes it once an authorised person confirms it in internet
 banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the batch
-id, the sums, and a message per rejected order.
+id, the sums per currency, and a message per rejected order. A batch the bank checked and refused comes back as a
+result whose `isAccepted()` is false, not as an exception.
+
+When a submission fails with `FioTransportException`, read `mayHaveReachedTheBank()` before trying again: a
+timeout after the request went out means the batch may already be waiting for authorisation, and submitting it
+again would pay twice. Check the pending batches in internet banking first. The same holds for
+`sinceBookmark()`, where an answer lost on the way has already moved the bookmark.
 
 ### Configuration
 
@@ -135,8 +144,9 @@ FioClient fio = FioClient.builder(token)
 | `baseUri` | `https://fioapi.fio.cz/v1/rest` | Where the bank is; point it at a stub in tests. |
 | `clock` | the system clock | The clock the rate limiting and `FioRateLimitException.retryAfter()` use. |
 
-A `FioClient` is immutable and safe to share between threads; requests to one token are serialised through the
-rate limit.
+A `FioClient` is immutable and safe to share between threads; requests through one client are serialised by its
+rate limit. Build one client per token and share it, because two clients with the same token do not know about
+each other's requests and the bank refuses the second one.
 
 ## The token
 
@@ -145,7 +155,8 @@ five minutes after it is authorised and lives at most 180 days unless it is rene
 enough for every download; submitting payments needs a token allowed to do so.
 
 `FioToken` never shows its value: `toString()` prints `FioToken[***]`, and every message, URL, response body and
-cause the client puts into an exception has the token replaced by `***`. `FioToken.of(value)` strips surrounding
+cause the client puts into an exception has the token replaced by `***`. The token still travels in the URL path
+of every download, by Fio's design, so the client refuses a `baseUri` that is not `https` (except on localhost). `FioToken.of(value)` strips surrounding
 whitespace, so a token read from a file with a trailing newline works; `FioToken.fromEnvironment("FIO_TOKEN")`
 reads it from an environment variable.
 
@@ -161,33 +172,49 @@ reads it from an environment variable.
 - **50 000 movements per download.** A larger answer is refused with HTTP 413, which becomes
   `FioTooManyTransactionsException`; ask for a shorter period or move the bookmark forward.
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`.
+- A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
 
 ## Errors
 
 Every failure is a `FioException`, an unchecked exception with the HTTP status and the bank's response body
 (token masked). The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
 `FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException`,
-`FioTooManyTransactionsException`, `FioTransportException` (no answer: connection, timeout, interruption) and the
-plain `FioException` for everything else, including an answer the client does not understand.
+`FioTooManyTransactionsException`, `FioTransportException` (no answer: connection, timeout, interruption; its
+`mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for everything
+else, including an answer the client does not understand.
 
-Bad input (a malformed account number, a symbol that is not digits, a period that ends before it starts) fails
-before anything is sent, with an `IllegalArgumentException` that names the problem.
+## Compatibility
+
+The public API is what `module-info.java` exports, under semantic versioning, with two things to know: the
+interfaces nested in `FioClient` may gain methods in a minor release, so implement them outside this library (as a
+test fake, say) only at your own risk; and the enums `TransactionType`, `CardTransactionType` and the format enums
+may gain constants, so a `switch` over them needs a `default`. The records that carry bank data (`Transaction`,
+`AccountInfo`, `CardTransaction`, `ImportResult`) may gain components in a minor release when Fio adds a field;
+their accessors stay, but code that calls their canonical constructor or deconstructs them with a record pattern
+has to be revisited.
+
+Bad input fails before anything is sent: a malformed value (an account number that fails the bank's checksum, a
+symbol that is not digits, a period that ends before it starts) is an `IllegalArgumentException` that names the
+problem, a payment builder with a required part missing is an `IllegalStateException`, and a `null` argument is a
+`NullPointerException`.
 
 ## The model
 
-- `FioStatement(info, transactions)`: one download of movements. `FioAccountInfo` holds the account
+- `AccountStatement(info, transactions)`: one download of movements. `AccountInfo` holds the account
   (`DomesticAccount`), IBAN, BIC, currency, opening and closing balance (`Money`), the period, the statement
   number and the ids of the first, last and bookmarked movement.
-- `FioTransaction`: one movement. `id`, `date`, `amount` (`Money`, negative for outgoing), `type`
-  (`TransactionType`, one of the 45 documented types or `OTHER`) with the bank's `typeLabel`, `counterparty`
+- `Transaction`: one movement. `id`, `date`, `amount` (`Money`, negative for outgoing), `type`
+  (`TransactionType`, one of the 43 distinct types in Fio's list, which repeats two of its 45 entries, or `OTHER`) with the bank's `typeLabel`, `counterparty`
   (account, name, bank name, BIC), `symbols` (variable, constant, specific), `userIdentification`, `executedBy`,
   `messageForRecipient`, `instructionId`, `detail`, `comment`, `payerReference`, and `columns`, every column the
   bank sent by its number, for anything new.
-- `Money(amount, currency)`, `DomesticAccount(prefix, number, bankCode)` with `toIban()`, `ForeignAccount(iban)`,
+- `Money(amount, currency)`, which keeps the bank's scale but compares by value (`1.0 CZK` equals `1.00 CZK`),
+  `DomesticAccount(prefix, number, bankCode)` with `toIban()` and `hasValidChecksum()`, `ForeignAccount(identifier)`,
   `PaymentSymbols`, `Counterparty`, `StatementId(year, number)`.
-- `MerchantStatement(account, iban, bic, currency, period, transactions)` with `CardTransaction` records mapped
-  from the documented XML fields.
-- `FioDocument(mediaType, content)` for a raw download, with `asText()` decoding by the charset the bank named.
+- `MerchantStatement(account, iban, bic, currency, dateStart, dateEnd, transactions)` with `CardTransaction`
+  records mapped from the documented XML fields, amounts and fees as `Money` in the account's currency.
+- `Download(mediaType, charset, content)` for a raw download; `asText()` decodes with the charset the bank named
+  or, when it named none, the one Fio documents for the format (Windows-1250 for GPC, UTF-8 otherwise).
 
 A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code) is a `DomesticAccount`;
 anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the bank sends for some

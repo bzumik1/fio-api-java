@@ -44,7 +44,7 @@ public record PaymentSymbols(@Nullable String variable, @Nullable String constan
      * @param variable the variable symbol
      * @return the symbols
      */
-    public static PaymentSymbols variable(String variable) {
+    public static PaymentSymbols ofVariable(String variable) {
         return new PaymentSymbols(variable, null, null);
     }
 

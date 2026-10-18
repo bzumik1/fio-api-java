@@ -9,7 +9,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * The type of an account movement, as Fio's documentation lists them. The bank sends the Czech label; a label this
- * library does not know maps to {@link #OTHER} and stays readable in {@link FioTransaction#typeLabel()}.
+ * library does not know maps to {@link #OTHER} and stays readable in {@link Transaction#typeLabel()}. Constants
+ * may be added in a minor release when Fio documents new types, so a {@code switch} over this type needs a
+ * {@code default} branch.
  */
 public enum TransactionType {
 

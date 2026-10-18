@@ -11,6 +11,7 @@ final class PaymentText {
 
     private static final String FIO_BANK_CODE = "2010";
     private static final int CENT_DECIMALS = 2;
+    private static final int INTEGER_DIGITS = 16;
     private static final Pattern XML_INCOMPATIBLE = Pattern.compile("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]");
 
     private PaymentText() {
@@ -54,6 +55,9 @@ final class PaymentText {
         if (!checked.isPositive()) {
             throw new IllegalArgumentException("A payment amount is positive: " + checked);
         }
+        if ((long) checked.amount().precision() - checked.amount().scale() > INTEGER_DIGITS) {
+            throw new IllegalArgumentException("A payment amount has at most " + INTEGER_DIGITS + " digits before the decimal point: " + checked);
+        }
         if (checked.amount().stripTrailingZeros().scale() > CENT_DECIMALS) {
             throw new IllegalArgumentException("A payment amount has at most two decimal places: " + checked);
         }
@@ -96,6 +100,9 @@ final class PaymentText {
         String stripped = value.replace(" ", "").toUpperCase(Locale.ROOT);
         if (!stripped.matches("[A-Z]{2}\\d{2}[A-Z0-9]{1,30}")) {
             throw new IllegalArgumentException("Not an IBAN: '" + value + "'");
+        }
+        if (!Iban.hasValidChecksum(stripped)) {
+            throw new IllegalArgumentException("Not an IBAN, the check digits do not match: '" + value + "'");
         }
         return stripped;
     }

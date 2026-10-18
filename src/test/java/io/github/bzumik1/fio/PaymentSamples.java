@@ -15,7 +15,7 @@ final class PaymentSamples {
     static DomesticPayment.Builder domesticBuilder() {
         return DomesticPayment.builder()
                 .from(PAYER)
-                .to("2212-2000000699/0300")
+                .to("19-2000145399/0800")
                 .amount(Money.czk("100.00"))
                 .date(DUE);
     }

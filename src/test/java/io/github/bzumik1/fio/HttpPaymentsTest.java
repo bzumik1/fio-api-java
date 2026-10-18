@@ -113,7 +113,7 @@ class HttpPaymentsTest {
         ImportResult result = client.payments().batch()
                 .domestic(order -> order
                         .from("1234562")
-                        .to("2212-2000000699/0300")
+                        .to("19-2000145399/0800")
                         .amount(Money.czk("100.00"))
                         .constantSymbol("0558")
                         .variableSymbol("1234567890")
@@ -140,8 +140,7 @@ class HttpPaymentsTest {
 
     @Test
     void should_write_domestic_euro_foreign_and_number_messages_by_batch_position_when_submitted_given_orders_out_of_sequence() {
-        answer(200, details(detail(1, "tuzemská"), detail(2, "europlatba"), detail(3, "zahraniční"),
-                detail(0, "bez pořadí"), detail(4, "mimo dávku")));
+        answer(200, details(detail(1, "tuzemská"), detail(2, "europlatba"), detail(3, "zahraniční")));
 
         ImportResult result = client.payments().batch()
                 .foreign(order -> order
@@ -168,10 +167,19 @@ class HttpPaymentsTest {
                 new Message(null, null, "Dávka přijata"),
                 new Message(2, Status.OK, "tuzemská"),
                 new Message(3, Status.OK, "europlatba"),
-                new Message(1, Status.OK, "zahraniční"),
-                new Message(0, Status.OK, "bez pořadí"),
-                new Message(4, Status.OK, "mimo dávku"));
+                new Message(1, Status.OK, "zahraniční"));
         assertThat(result.instructionId()).isEqualTo(9L);
+    }
+
+    @Test
+    void should_leave_every_order_number_empty_when_submitted_given_detail_id_outside_the_batch() {
+        answer(200, details(detail(1, "tuzemská"), detail(0, "bez pořadí"), detail(3, "mimo dávku")));
+
+        ImportResult result = client.payments().batch().add(domestic()).add(euro()).submit();
+
+        assertThat(result.messages()).extracting(Message::orderNumber).containsOnlyNulls();
+        assertThat(result.messages()).extracting(Message::text)
+                .containsExactly("Dávka přijata", "tuzemská", "bez pořadí", "mimo dávku");
     }
 
     @Test
@@ -251,7 +259,7 @@ class HttpPaymentsTest {
         assertThatIllegalStateException().isThrownBy(() -> batch.domestic(order -> order.from("1234562")))
                 .withMessage("The recipient's account is required");
         assertThatIllegalStateException().isThrownBy(() -> batch.euro(order -> order.from("1234562")))
-                .withMessage("The recipient's IBAN is required");
+                .withMessage("The recipient's account is required");
         assertThatIllegalStateException().isThrownBy(() -> batch.foreign(order -> order.from("1234562")))
                 .withMessage("The recipient's account is required");
         assertThatNullPointerException().isThrownBy(() -> batch.domestic(null)).withMessage("order");

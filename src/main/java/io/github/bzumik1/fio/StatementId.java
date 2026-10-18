@@ -43,7 +43,11 @@ public record StatementId(int year, int number) implements Comparable<StatementI
         if (!matcher.matches()) {
             throw new MalformedResponseException("Not a statement number: '" + text + "'");
         }
-        return new StatementId(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
+        try {
+            return new StatementId(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
+        } catch (IllegalArgumentException e) {
+            throw new MalformedResponseException("Not a statement number: '" + text + "'", e);
+        }
     }
 
     @Override

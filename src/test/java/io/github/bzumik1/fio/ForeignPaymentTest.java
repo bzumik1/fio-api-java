@@ -22,7 +22,7 @@ class ForeignPaymentTest {
     void should_carry_every_part_when_built_given_full_order() {
         assertThat(PaymentSamples.fullForeign()).isEqualTo(new ForeignPayment(
                 DomesticAccount.parse("1234562"),
-                "PK36SCBL0000001123456702",
+                new ForeignAccount("PK36SCBL0000001123456702"),
                 "ALFHPKKAXXX",
                 new Money(new BigDecimal("100"), Currency.getInstance("USD")),
                 DUE,
@@ -50,11 +50,11 @@ class ForeignPaymentTest {
         ForeignPayment payment = foreignBuilder().from(DomesticAccount.of("2400222222", "2010")).to(grouped).build();
 
         assertThat(grouped).hasSizeGreaterThan(34);
-        assertThat(payment.toAccount()).isEqualTo(account);
+        assertThat(payment.to()).isEqualTo(new ForeignAccount(account));
         assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().to(account + "4").build())
                 .withMessage("The recipient's account is at most 34 characters, not 35");
         assertThatIllegalArgumentException().isThrownBy(() -> foreignBuilder().to("   ").build())
-                .withMessage("The recipient's account is blank");
+                .withMessage("A foreign account needs an identifier");
     }
 
     @ParameterizedTest

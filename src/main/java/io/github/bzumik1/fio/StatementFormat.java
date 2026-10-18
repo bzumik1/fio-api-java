@@ -1,37 +1,45 @@
 package io.github.bzumik1.fio;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+
 /**
  * The raw formats Fio offers for a download of an official statement.
+ *
+ * <p>Constants may be added in a minor release when Fio offers a new format, so a {@code switch} over this type
+ * needs a {@code default} branch.
  */
 public enum StatementFormat {
 
     /** Semicolon-separated values. */
-    CSV("csv", "text/csv"),
+    CSV("csv", "text/csv", StandardCharsets.UTF_8),
     /** The Czech GPC format. */
-    GPC("gpc", "text/plain"),
+    GPC("gpc", "text/plain", Windows1250.CHARSET),
     /** An HTML page. */
-    HTML("html", "text/html"),
+    HTML("html", "text/html", StandardCharsets.UTF_8),
     /** The JSON format the typed downloads read. */
-    JSON("json", "application/json"),
+    JSON("json", "application/json", StandardCharsets.UTF_8),
     /** Open Financial Exchange. */
-    OFX("ofx", "application/x-ofx"),
+    OFX("ofx", "application/x-ofx", StandardCharsets.UTF_8),
     /** Fio's own XML. */
-    XML("xml", "application/xml"),
+    XML("xml", "application/xml", StandardCharsets.UTF_8),
     /** A PDF document. */
-    PDF("pdf", "application/pdf"),
+    PDF("pdf", "application/pdf", StandardCharsets.UTF_8),
     /** SWIFT MT940, which Fio serves with the extension {@code sta}. */
-    MT940("sta", "text/plain"),
+    MT940("sta", "text/plain", StandardCharsets.UTF_8),
     /** The Czech banking association's camt.053 XML. */
-    CBA_XML("cba_xml", "application/xml"),
+    CBA_XML("cba_xml", "application/xml", StandardCharsets.UTF_8),
     /** The Slovak banking association's camt.053 XML. */
-    SBA_XML("sba_xml", "application/xml");
+    SBA_XML("sba_xml", "application/xml", StandardCharsets.UTF_8);
 
     private final String extension;
     private final String mediaType;
+    private final Charset charset;
 
-    StatementFormat(String extension, String mediaType) {
+    StatementFormat(String extension, String mediaType, Charset charset) {
         this.extension = extension;
         this.mediaType = mediaType;
+        this.charset = charset;
     }
 
     /**
@@ -50,5 +58,18 @@ public enum StatementFormat {
      */
     public String mediaType() {
         return mediaType;
+    }
+
+    /**
+     * Returns the charset Fio documents for the format, used when the bank's answer names none.
+     *
+     * @return the documented charset
+     */
+    public Charset charset() {
+        return charset;
+    }
+
+    private static final class Windows1250 {
+        private static final Charset CHARSET = Charset.forName("windows-1250");
     }
 }

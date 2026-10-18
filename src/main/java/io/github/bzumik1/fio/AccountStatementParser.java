@@ -10,12 +10,13 @@ import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-final class FioStatementParser {
+final class AccountStatementParser {
 
     private static final Pattern COLUMN_KEY = Pattern.compile("column(\\d{1,9})");
     private static final Pattern DOMESTIC_ACCOUNT = Pattern.compile("(?:\\d{1,6}-)?\\d{1,10}");
@@ -25,17 +26,21 @@ final class FioStatementParser {
             .disable(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES)
             .build();
 
-    FioStatement parse(String json) {
+    AccountStatement parse(String json) {
+        return parse(json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    AccountStatement parse(byte[] json) {
         JsonNode statement = readTree(json).path("accountStatement");
         if (!statement.isObject()) {
             throw new MalformedResponseException("The body has no accountStatement object");
         }
-        return new FioStatement(
+        return new AccountStatement(
                 info(statement.path("info")),
                 transactions(statement.path("transactionList").path("transaction")));
     }
 
-    private JsonNode readTree(String json) {
+    private JsonNode readTree(byte[] json) {
         try {
             return mapper.readTree(json);
         } catch (JacksonException e) {
@@ -43,7 +48,7 @@ final class FioStatementParser {
         }
     }
 
-    private FioAccountInfo info(JsonNode info) {
+    private AccountInfo info(JsonNode info) {
         if (!info.isObject()) {
             throw new MalformedResponseException("The statement has no info object");
         }
@@ -51,7 +56,7 @@ final class FioStatementParser {
         Currency currency = field.apply("currency").requiredCurrency();
         Integer year = field.apply("yearList").optionalInt();
         Integer number = field.apply("idList").optionalInt();
-        return new FioAccountInfo(
+        return new AccountInfo(
                 account(field.apply("accountId"), field.apply("bankId")),
                 field.apply("iban").requiredText(),
                 field.apply("bic").requiredText(),
@@ -84,28 +89,28 @@ final class FioStatementParser {
         }
     }
 
-    private List<FioTransaction> transactions(JsonNode transactions) {
+    private List<Transaction> transactions(JsonNode transactions) {
         if (transactions.isMissingNode() || transactions.isNull()) {
             return List.of();
         }
         if (!transactions.isArray()) {
             throw new MalformedResponseException("transactionList.transaction is not an array");
         }
-        List<FioTransaction> parsed = new ArrayList<>();
+        List<Transaction> parsed = new ArrayList<>();
         for (JsonNode transaction : transactions) {
             parsed.add(transaction(transaction));
         }
         return parsed;
     }
 
-    private FioTransaction transaction(JsonNode transaction) {
+    private Transaction transaction(JsonNode transaction) {
         if (!transaction.isObject()) {
             throw new MalformedResponseException("A transaction is not an object");
         }
-        Map<Integer, FioColumn> columns = columns(transaction);
+        Map<Integer, TransactionColumn> columns = columns(transaction);
         Function<Column, RawValue> column = known -> known.valueIn(columns);
         String typeLabel = column.apply(Column.TYPE).requiredText();
-        return new FioTransaction(
+        return new Transaction(
                 column.apply(Column.MOVEMENT_ID).requiredLong(),
                 column.apply(Column.DATE).requiredDate(),
                 new Money(column.apply(Column.AMOUNT).requiredDecimal(), column.apply(Column.CURRENCY).requiredCurrency()),
@@ -154,16 +159,20 @@ final class FioStatementParser {
         }
     }
 
-    private static Map<Integer, FioColumn> columns(JsonNode transaction) {
-        Map<Integer, FioColumn> columns = new TreeMap<>();
+    private static Map<Integer, TransactionColumn> columns(JsonNode transaction) {
+        Map<Integer, TransactionColumn> columns = new TreeMap<>();
         for (Map.Entry<String, JsonNode> property : transaction.properties()) {
             JsonNode column = property.getValue();
             Integer id = column.isObject() ? columnId(property.getKey(), column) : null;
             if (id != null) {
-                columns.put(id, new FioColumn(id, textOf(column.get("name")), textOf(column.get("value"))));
+                columns.put(id, new TransactionColumn(id, interned(textOf(column.get("name"))), textOf(column.get("value"))));
             }
         }
         return columns;
+    }
+
+    private static @Nullable String interned(@Nullable String name) {
+        return name == null ? null : name.intern();
     }
 
     private static @Nullable Integer columnId(String key, JsonNode column) {
@@ -218,8 +227,8 @@ final class FioStatementParser {
             this.documentedName = documentedName;
         }
 
-        RawValue valueIn(Map<Integer, FioColumn> columns) {
-            FioColumn column = columns.get(id);
+        RawValue valueIn(Map<Integer, TransactionColumn> columns) {
+            TransactionColumn column = columns.get(id);
             return new RawValue("column " + id + " (" + documentedName + ")", column == null ? null : column.value());
         }
     }

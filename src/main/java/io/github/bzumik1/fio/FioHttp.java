@@ -2,11 +2,17 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
-import java.io.IOException;
+import java.net.ConnectException;
+import java.net.http.HttpConnectTimeoutException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -71,9 +77,9 @@ final class FioHttp {
         return send(request);
     }
 
-    <T> T parsed(FioResponse response, Function<String, T> parser) {
+    <T> T parsed(FioResponse response, Function<byte[], T> parser) {
         try {
-            return parser.apply(response.text());
+            return parser.apply(response.body());
         } catch (MalformedResponseException e) {
             throw new FioException(
                     response.description() + " was answered with HTTP " + response.status()
@@ -90,15 +96,26 @@ final class FioHttp {
 
     private FioResponse exchange(HttpRequest request) {
         HttpResponse<byte[]> response;
+        CompletableFuture<HttpResponse<byte[]>> pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        } catch (IOException e) {
+            response = pending.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
             throw new FioTransportException(
-                    describe(request) + " failed: " + token.mask(e.toString()),
-                    TokenMaskedFailure.withoutToken(e, token));
+                    describe(request) + " failed: " + token.mask(cause.toString()),
+                    TokenMaskedFailure.withoutToken(cause, token),
+                    !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException));
+        } catch (TimeoutException e) {
+            pending.cancel(true);
+            throw new FioTransportException(
+                    describe(request) + " did not finish within " + requestTimeout,
+                    TokenMaskedFailure.withoutToken(e, token),
+                    true);
         } catch (InterruptedException e) {
+            pending.cancel(true);
             Thread.currentThread().interrupt();
-            throw new FioTransportException(describe(request) + " was interrupted", TokenMaskedFailure.withoutToken(e, token));
+            throw new FioTransportException(
+                    describe(request) + " was interrupted", TokenMaskedFailure.withoutToken(e, token), true);
         }
         FioResponse answer = new FioResponse(
                 describe(request),
@@ -168,8 +185,8 @@ final class FioHttp {
             return new String(body, StandardCharsets.UTF_8);
         }
 
-        FioDocument document() {
-            return new FioDocument(mediaType == null ? "application/octet-stream" : mediaType, body);
+        Download document(Charset documentedCharset) {
+            return Download.of(mediaType == null ? "application/octet-stream" : mediaType, documentedCharset, body);
         }
     }
 }

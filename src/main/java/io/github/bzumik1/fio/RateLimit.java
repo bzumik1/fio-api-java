@@ -1,5 +1,7 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Duration;
 
 import static java.util.Objects.requireNonNull;
@@ -17,6 +19,7 @@ import static java.util.Objects.requireNonNull;
 public final class RateLimit {
 
     private static final Duration DEFAULT_MAXIMUM_WAIT = Duration.ofMinutes(2);
+    private static final Duration LONGEST_WAIT = Duration.ofDays(1);
 
     private final Duration maximumWait;
 
@@ -44,6 +47,9 @@ public final class RateLimit {
         if (maximumWait.isNegative() || maximumWait.isZero()) {
             throw new IllegalArgumentException("The maximum wait must be positive: " + maximumWait);
         }
+        if (maximumWait.compareTo(LONGEST_WAIT) > 0) {
+            throw new IllegalArgumentException("The maximum wait is at most " + LONGEST_WAIT + ": " + maximumWait);
+        }
         return new RateLimit(maximumWait);
     }
 
@@ -66,7 +72,7 @@ public final class RateLimit {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         return other instanceof RateLimit that && that.maximumWait.equals(maximumWait);
     }
 

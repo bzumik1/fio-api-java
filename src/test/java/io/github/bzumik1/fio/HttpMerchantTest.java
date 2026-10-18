@@ -75,13 +75,13 @@ class HttpMerchantTest {
         byte[] body = "accountId;2111111111".getBytes(StandardCharsets.UTF_8);
         server.respondWith(200, format.mediaType() + ";charset=UTF-8", body);
 
-        FioDocument document = client.merchant().between(FROM, TO).download(format);
+        Download document = client.merchant().between(FROM, TO).download(format);
 
         assertThat(server.requests()).containsExactly(new RecordedRequest(
                 "GET",
                 "/v1/rest/merchant/" + SECRET + "/2012-07-01/2012-07-31/transactions." + format.extension(),
                 format.mediaType()));
-        assertThat(document).isEqualTo(new FioDocument(format.mediaType() + ";charset=UTF-8", body));
+        assertThat(document).isEqualTo(new Download(format.mediaType() + ";charset=UTF-8", StandardCharsets.UTF_8, body));
     }
 
     @Test

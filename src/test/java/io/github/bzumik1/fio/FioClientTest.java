@@ -59,12 +59,12 @@ class FioClientTest {
     void should_download_since_bookmark_as_json_when_fetched() {
         server.respondWith(200, Fixtures.read(PERIODS_STATEMENT));
 
-        FioStatement statement = client.transactions().sinceBookmark().fetch();
+        AccountStatement statement = client.transactions().sinceBookmark().fetch();
 
         assertThat(server.requests()).containsExactly(
                 new RecordedRequest("GET", "/v1/rest/last/" + SECRET + "/transactions.json", JSON));
         assertThat(statement.info().account()).isEqualTo(DomesticAccount.parse("2400222222/2010"));
-        assertThat(statement.transactions()).extracting(FioTransaction::id)
+        assertThat(statement.transactions()).extracting(Transaction::id)
                 .containsExactly(1148734530L, 1148734781L, 1149190193L);
     }
 
@@ -72,7 +72,7 @@ class FioClientTest {
     void should_put_iso_dates_into_path_when_period_fetched() {
         server.respondWith(200, Fixtures.read(PERIODS_STATEMENT));
 
-        FioStatement statement = client.transactions().between(FROM, TO).fetch();
+        AccountStatement statement = client.transactions().between(FROM, TO).fetch();
 
         assertThat(server.requests()).containsExactly(
                 new RecordedRequest("GET", "/v1/rest/periods/" + SECRET + "/2026-01-05/2026-02-09/transactions.json", JSON));
@@ -101,7 +101,7 @@ class FioClientTest {
     void should_download_raw_format_with_its_extension_when_period_downloaded(TransactionFormat format) {
         server.respondWith(200, "text/" + format.extension() + ";charset=windows-1250", "výpis".getBytes(StandardCharsets.UTF_8));
 
-        FioDocument document = client.transactions().between(FROM, TO).download(format);
+        Download document = client.transactions().between(FROM, TO).download(format);
 
         assertThat(server.requests()).containsExactly(new RecordedRequest(
                 "GET", "/v1/rest/periods/" + SECRET + "/2026-01-05/2026-02-09/transactions." + format.extension(), format.mediaType()));
@@ -113,18 +113,18 @@ class FioClientTest {
     void should_download_raw_format_since_bookmark_when_downloaded() {
         server.respondWith(200, "application/x-ofx", new byte[] {1, 2, 3});
 
-        FioDocument document = client.transactions().sinceBookmark().download(TransactionFormat.OFX);
+        Download document = client.transactions().sinceBookmark().download(TransactionFormat.OFX);
 
         assertThat(server.requests()).extracting(RecordedRequest::path)
                 .containsExactly("/v1/rest/last/" + SECRET + "/transactions.ofx");
-        assertThat(document).isEqualTo(new FioDocument("application/x-ofx", new byte[] {1, 2, 3}));
+        assertThat(document).isEqualTo(new Download("application/x-ofx", StandardCharsets.UTF_8, new byte[] {1, 2, 3}));
     }
 
     @Test
     void should_fall_back_to_octet_stream_when_downloaded_given_answer_without_content_type() {
         server.respondWith(200, "", new byte[] {7});
 
-        FioDocument document = client.transactions().sinceBookmark().download(TransactionFormat.GPC);
+        Download document = client.transactions().sinceBookmark().download(TransactionFormat.GPC);
 
         assertThat(document.mediaType()).isEqualTo("application/octet-stream");
     }
@@ -145,7 +145,7 @@ class FioClientTest {
         server.enqueue(200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
         server.enqueue(200, "application/pdf", "%PDF".getBytes(StandardCharsets.UTF_8));
 
-        FioDocument pdf = client.statements().latest().download(StatementFormat.PDF);
+        Download pdf = client.statements().latest().download(StatementFormat.PDF);
 
         assertThat(server.requests()).extracting(RecordedRequest::path, RecordedRequest::accept).containsExactly(
                 tuple("/v1/rest/lastStatement/" + SECRET + "/statement", "text/plain"),
@@ -158,7 +158,7 @@ class FioClientTest {
     void should_download_statement_by_number_as_json_when_fetched() {
         server.respondWith(200, Fixtures.read(PERIODS_STATEMENT));
 
-        FioStatement statement = client.statements().number(2012, 1).fetch();
+        AccountStatement statement = client.statements().number(2012, 1).fetch();
 
         assertThat(server.requests()).containsExactly(
                 new RecordedRequest("GET", "/v1/rest/by-id/" + SECRET + "/2012/1/transactions.json", JSON));
@@ -266,7 +266,7 @@ class FioClientTest {
         server.enqueue(409, "");
         server.respondWith(200, Fixtures.read(PERIODS_STATEMENT));
 
-        FioStatement statement = client.transactions().sinceBookmark().fetch();
+        AccountStatement statement = client.transactions().sinceBookmark().fetch();
 
         assertThat(statement.transactions()).hasSize(3);
         assertThat(server.requests()).hasSize(2);
@@ -470,8 +470,9 @@ class FioClientTest {
 
     @Test
     void should_raise_transport_failure_and_keep_interrupt_flag_when_downloading_given_interrupted_request() {
-        InterruptedException interruption = new InterruptedException("Shutting down " + SECRET);
-        FioClient failingClient = builder().httpClient(new FailingHttpClient(interruption)).build();
+        server.respondAfter(Duration.ofSeconds(5), 200, Fixtures.read(PERIODS_STATEMENT));
+        FioClient failingClient = client;
+        Thread.currentThread().interrupt();
 
         try {
             FioTransportException failure = catchThrowableOfType(FioTransportException.class,

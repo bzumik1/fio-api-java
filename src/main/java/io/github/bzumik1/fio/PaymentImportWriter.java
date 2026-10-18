@@ -93,7 +93,7 @@ final class PaymentImportWriter {
     private static void euro(XMLStreamWriter xml, EuroPayment payment) throws XMLStreamException {
         xml.writeStartElement("T2Transaction");
         payer(xml, payment);
-        element(xml, "accountTo", payment.toIban());
+        element(xml, "accountTo", payment.to().identifier());
         symbols(xml, payment.symbols());
         optional(xml, "bic", payment.bic());
         date(xml, payment);
@@ -108,7 +108,7 @@ final class PaymentImportWriter {
     private static void foreign(XMLStreamWriter xml, ForeignPayment payment) throws XMLStreamException {
         xml.writeStartElement("ForeignTransaction");
         payer(xml, payment);
-        element(xml, "accountTo", payment.toAccount());
+        element(xml, "accountTo", payment.to().identifier());
         element(xml, "bic", payment.bic());
         date(xml, payment);
         optional(xml, "comment", payment.comment());

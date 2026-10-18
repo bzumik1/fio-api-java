@@ -20,7 +20,8 @@ import static java.util.Objects.requireNonNull;
  * @param symbols the variable, constant and specific symbols
  * @param date the day the payment is due
  * @param messageForRecipient the message the recipient sees, up to 140 characters
- * @param comment the payer's own label, up to 140 characters
+ * @param comment the payer's own label, up to 140 characters (Fio's documentation says 255, its import schema
+ *        140, and the schema is what the bank validates against)
  * @param paymentReason the three-digit payment reason code, needed only for some foreign-currency transfers
  * @param type standard, priority, or a direct debit order
  */
@@ -56,6 +57,9 @@ public record DomesticPayment(
         requireNonNull(to, "to");
         if (to.bankCode() == null) {
             throw new IllegalArgumentException("The recipient's account needs a bank code: " + to);
+        }
+        if (!to.hasValidChecksum()) {
+            throw new IllegalArgumentException("The recipient's account fails the modulo 11 check, so it is mistyped: " + to);
         }
         amount = positive(amount);
         requireNonNull(symbols, "symbols");

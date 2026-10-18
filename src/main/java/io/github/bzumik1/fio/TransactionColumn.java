@@ -9,5 +9,5 @@ import org.jspecify.annotations.Nullable;
  * @param name the name the bank gave the column, or {@code null} when it sent none
  * @param value the raw value, as text; {@code null} when the bank sent {@code null}
  */
-public record FioColumn(int id, @Nullable String name, @Nullable String value) {
+public record TransactionColumn(int id, @Nullable String name, @Nullable String value) {
 }

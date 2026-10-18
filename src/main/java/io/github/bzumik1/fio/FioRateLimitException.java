@@ -9,8 +9,9 @@ import java.time.Instant;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The token was used less than 30 seconds ago, so the request was refused with HTTP 409 or, under
- * {@link RateLimit#failFast()}, not sent at all. {@link #retryAfter()} says when the next request may go.
+ * The token was used less than 30 seconds ago, so the request was refused with HTTP 409 or, when the wait would
+ * exceed the {@link RateLimit}, not sent at all. {@link #retryAfter()} says when the next request may go;
+ * {@link #statusCode()} is 409 when the bank refused and empty when the client did not send.
  */
 public final class FioRateLimitException extends FioException {
 
@@ -32,6 +33,15 @@ public final class FioRateLimitException extends FioException {
     public FioRateLimitException(String message, @Nullable String responseBody, Instant retryAfter) {
         super(message, CONFLICT, responseBody);
         this.retryAfter = requireNonNull(retryAfter, "retryAfter");
+    }
+
+    private FioRateLimitException(String message, Instant retryAfter) {
+        super(message, (Throwable) null);
+        this.retryAfter = retryAfter;
+    }
+
+    static FioRateLimitException notSent(String message, Instant retryAfter) {
+        return new FioRateLimitException(message, retryAfter);
     }
 
     /**

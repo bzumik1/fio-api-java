@@ -10,6 +10,7 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,6 +21,10 @@ import java.util.function.Function;
 final class ImportResponseParser {
 
     private static final String ROOT = "responseImport";
+
+    ImportResult parse(byte[] xml) {
+        return parse(new String(xml, StandardCharsets.UTF_8));
+    }
 
     ImportResult parse(String xml) {
         Element root = read(xml);

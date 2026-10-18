@@ -16,15 +16,15 @@ final class HttpMerchant implements FioClient.Merchant {
     @Override
     public FioClient.MerchantRequest between(LocalDate from, LocalDate to) {
         HttpFioClient.requirePeriod(from, to);
-        return new Download(HttpFioClient.iso(from), HttpFioClient.iso(to));
+        return new HttpMerchantRequest(HttpFioClient.iso(from), HttpFioClient.iso(to));
     }
 
-    private final class Download implements FioClient.MerchantRequest {
+    private final class HttpMerchantRequest implements FioClient.MerchantRequest {
 
         private final String from;
         private final String to;
 
-        private Download(String from, String to) {
+        private HttpMerchantRequest(String from, String to) {
             this.from = from;
             this.to = to;
         }
@@ -35,9 +35,9 @@ final class HttpMerchant implements FioClient.Merchant {
         }
 
         @Override
-        public FioDocument download(MerchantFormat format) {
+        public Download download(MerchantFormat format) {
             requireNonNull(format, "format");
-            return get(format).document();
+            return get(format).document(format.charset());
         }
 
         private FioHttp.FioResponse get(MerchantFormat format) {

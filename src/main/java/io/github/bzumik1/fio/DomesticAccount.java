@@ -91,9 +91,28 @@ public record DomesticAccount(@Nullable String prefix, String number, @Nullable 
         return "CZ" + padded(Integer.toString(checksum), 2) + bban;
     }
 
+    /**
+     * Tells whether the prefix and the number pass the Czech National Bank's modulo 11 check, which every account
+     * number at a Czech bank passes. A number that fails it is a typing error.
+     *
+     * @return whether both parts pass the check
+     */
+    public boolean hasValidChecksum() {
+        return weightedModulo11(padded(prefix == null ? "0" : prefix, 6)) && weightedModulo11(padded(number, 10));
+    }
+
     @Override
     public String toString() {
         return bankCode == null ? numberWithPrefix() : numberWithPrefix() + "/" + bankCode;
+    }
+
+    private static boolean weightedModulo11(String digits) {
+        int[] weights = {6, 3, 7, 9, 10, 5, 8, 4, 2, 1};
+        int sum = 0;
+        for (int i = 0; i < digits.length(); i++) {
+            sum += Character.digit(digits.charAt(i), 10) * weights[weights.length - digits.length() + i];
+        }
+        return sum % 11 == 0;
     }
 
     private static @Nullable String normalisedPrefix(@Nullable String prefix) {

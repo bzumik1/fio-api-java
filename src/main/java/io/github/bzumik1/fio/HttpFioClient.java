@@ -1,5 +1,8 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
+
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.function.Supplier;
@@ -12,7 +15,7 @@ final class HttpFioClient implements FioClient {
     private static final String TRANSACTIONS = "transactions.";
 
     private final FioHttp http;
-    private final FioStatementParser statementParser = new FioStatementParser();
+    private final AccountStatementParser statementParser = new AccountStatementParser();
     private final Transactions transactions = new HttpTransactions();
     private final Statements statements = new HttpStatements();
     private final Bookmark bookmark = new HttpBookmark();
@@ -72,32 +75,32 @@ final class HttpFioClient implements FioClient {
         @Override
         public TransactionRequest between(LocalDate from, LocalDate to) {
             requirePeriod(from, to);
-            return new Download("periods", http.token().value(), iso(from), iso(to));
+            return new HttpTransactionRequest("periods", http.token().value(), iso(from), iso(to));
         }
 
         @Override
         public TransactionRequest sinceBookmark() {
-            return new Download("last", http.token().value());
+            return new HttpTransactionRequest("last", http.token().value());
         }
     }
 
-    private final class Download implements TransactionRequest {
+    private final class HttpTransactionRequest implements TransactionRequest {
 
         private final String[] path;
 
-        private Download(String... path) {
+        private HttpTransactionRequest(String... path) {
             this.path = path;
         }
 
         @Override
-        public FioStatement fetch() {
+        public AccountStatement fetch() {
             return http.parsed(http.get(JSON, path(TRANSACTIONS + "json")), statementParser::parse);
         }
 
         @Override
-        public FioDocument download(TransactionFormat format) {
+        public Download download(TransactionFormat format) {
             requireNonNull(format, "format");
-            return http.get(format.mediaType(), path(TRANSACTIONS + format.extension())).document();
+            return http.get(format.mediaType(), path(TRANSACTIONS + format.extension())).document(format.charset());
         }
 
         private String[] path(String last) {
@@ -112,40 +115,44 @@ final class HttpFioClient implements FioClient {
 
         @Override
         public StatementRequest latest() {
-            return new Statement(() -> http.parsed(
+            return new HttpStatementRequest(() -> http.parsed(
                     http.get("text/plain", "lastStatement", http.token().value(), "statement"),
-                    StatementId::parse));
+                    body -> StatementId.parse(new String(body, StandardCharsets.UTF_8))));
         }
 
         @Override
         public StatementRequest number(StatementId id) {
             requireNonNull(id, "id");
-            return new Statement(() -> id);
+            return new HttpStatementRequest(() -> id);
         }
     }
 
-    private final class Statement implements StatementRequest {
+    private final class HttpStatementRequest implements StatementRequest {
 
-        private final Supplier<StatementId> id;
+        private final Supplier<StatementId> lookup;
+        private @Nullable StatementId resolved;
 
-        private Statement(Supplier<StatementId> id) {
-            this.id = id;
+        private HttpStatementRequest(Supplier<StatementId> lookup) {
+            this.lookup = lookup;
         }
 
         @Override
-        public StatementId id() {
-            return id.get();
+        public synchronized StatementId id() {
+            if (resolved == null) {
+                resolved = lookup.get();
+            }
+            return resolved;
         }
 
         @Override
-        public FioStatement fetch() {
-            return http.parsed(http.get(JSON, path(id.get(), TRANSACTIONS + "json")), statementParser::parse);
+        public AccountStatement fetch() {
+            return http.parsed(http.get(JSON, path(id(), TRANSACTIONS + "json")), statementParser::parse);
         }
 
         @Override
-        public FioDocument download(StatementFormat format) {
+        public Download download(StatementFormat format) {
             requireNonNull(format, "format");
-            return http.get(format.mediaType(), path(id.get(), TRANSACTIONS + format.extension())).document();
+            return http.get(format.mediaType(), path(id(), TRANSACTIONS + format.extension())).document(format.charset());
         }
 
         private String[] path(StatementId statement, String last) {

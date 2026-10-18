@@ -18,7 +18,7 @@ import static java.util.Objects.requireNonNull;
  * A SEPA payment in euro, which Fio calls a Europlatba.
  *
  * @param from the payer's account
- * @param toIban the recipient's IBAN
+ * @param to the recipient's account, by IBAN
  * @param bic the BIC of the recipient's bank, optional within SEPA
  * @param amount the amount, in euro
  * @param symbols the variable, constant and specific symbols
@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  */
 public record EuroPayment(
         DomesticAccount from,
-        String toIban,
+        ForeignAccount to,
         @Nullable String bic,
         Money amount,
         PaymentSymbols symbols,
@@ -48,7 +48,7 @@ public record EuroPayment(
      * Validates the components.
      *
      * @param from the payer's account
-     * @param toIban the recipient's IBAN
+     * @param to the recipient's account, by IBAN
      * @param bic the BIC
      * @param amount the amount
      * @param symbols the symbols
@@ -64,7 +64,7 @@ public record EuroPayment(
      */
     public EuroPayment {
         from = payerAccount(from);
-        toIban = iban(toIban);
+        to = new ForeignAccount(iban(requireNonNull(to, "to").identifier()));
         bic = bic == null ? null : PaymentText.bic(bic);
         amount = positive(amount);
         if (!amount.currency().getCurrencyCode().equals("EUR")) {
@@ -136,7 +136,7 @@ public record EuroPayment(
     public static final class Builder {
 
         private @Nullable DomesticAccount from;
-        private @Nullable String toIban;
+        private @Nullable ForeignAccount to;
         private @Nullable String bic;
         private @Nullable Money amount;
         private @Nullable String variableSymbol;
@@ -180,7 +180,17 @@ public record EuroPayment(
          * @return this builder
          */
         public Builder to(String iban) {
-            this.toIban = requireNonNull(iban, "iban");
+            return to(new ForeignAccount(iban));
+        }
+
+        /**
+         * Sets the recipient's account.
+         *
+         * @param account the account, identified by its IBAN
+         * @return this builder
+         */
+        public Builder to(ForeignAccount account) {
+            this.to = requireNonNull(account, "account");
             return this;
         }
 
@@ -325,7 +335,7 @@ public record EuroPayment(
         public EuroPayment build() {
             return new EuroPayment(
                     required(from, "payer's account"),
-                    required(toIban, "recipient's IBAN"),
+                    required(to, "recipient's account"),
                     bic,
                     required(amount, "amount"),
                     new PaymentSymbols(variableSymbol, constantSymbol, specificSymbol),
