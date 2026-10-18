@@ -76,7 +76,7 @@ jobs:
         run: ./gradlew -Pversion="${TAG#v}" publishAndReleaseToMavenCentral
 
   github-release:
-    name: Create the GitHub release
+    name: Create or complete the GitHub release
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -108,14 +108,15 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: jars/*.jar
-      - name: Create the release unless it exists
+      - name: Create the release, or give the one made on GitHub its notes and files
         env:
           TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"
+            gh release edit "$TAG" --title "fio-api ${TAG#v}" --notes-file notes.md
+            gh release upload "$TAG" --clobber jars/*
           else
             gh release create "$TAG" --verify-tag --title "fio-api ${TAG#v}" --notes-file notes.md jars/*
           fi
