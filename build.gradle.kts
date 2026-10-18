@@ -74,7 +74,7 @@ tasks.test {
 		languageVersion = testJdk
 	}
 	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
-	maxHeapSize = "512m"
+	maxHeapSize = "1g"
 	testLogging {
 		events("failed", "skipped")
 		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
