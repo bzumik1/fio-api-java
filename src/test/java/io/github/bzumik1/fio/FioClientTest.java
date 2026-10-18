@@ -528,6 +528,32 @@ class FioClientTest {
         assertThat(failure.responseBody()).hasValue("a".repeat(600) + "b".repeat(600) + "c".repeat(600));
     }
 
+    @Test
+    void should_stop_reading_after_the_beginning_of_the_body_when_refused_given_error_body_larger_than_the_heap() {
+        byte[] mebibyte = "y".repeat(1024 * 1024).getBytes(StandardCharsets.UTF_8);
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(500, Collections.nCopies(1280, mebibyte));
+        FioClient client = bank.builder().httpClient(http).build();
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> client.transactions().sinceBookmark().fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioAuthorizationException.class);
+        assertThat(failure.responseBody()).hasValue("y".repeat(FioException.RESPONSE_BODY_LIMIT) + "\u2026");
+        assertThat(http.deliveredBytes()).isLessThan(2L * 1024 * 1024);
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void should_raise_rate_limit_failure_and_drop_the_connection_when_refused_given_409_body_that_never_ends() throws InterruptedException {
+        FioClient failFast = bank.builder().rateLimit(RateLimit.failFast()).build();
+        server().enqueueEndless(409, "y".repeat(8192).getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> failFast.transactions().sinceBookmark().fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioRateLimitException.class);
+        assertThat(failure.responseBody()).hasValue("y".repeat(FioException.RESPONSE_BODY_LIMIT) + "\u2026");
+        assertThat(server().awaitDroppedConnection(Duration.ofSeconds(5))).isTrue();
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0, -1, Integer.MIN_VALUE})
     void should_reject_when_maximum_response_size_set_given_size_not_positive(int bytes) {

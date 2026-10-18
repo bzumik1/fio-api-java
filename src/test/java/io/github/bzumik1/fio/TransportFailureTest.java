@@ -75,6 +75,19 @@ class TransportFailureTest {
 
     @Test
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void should_give_up_within_request_timeout_and_drop_the_connection_when_refused_given_error_body_that_stalls() throws InterruptedException {
+        bank.server().enqueueTricklingAfterPartOfBody(500, "<html>Chyba");
+        FioClient impatient = bank.builder().requestTimeout(Duration.ofMillis(300)).build();
+
+        FioTransportException failure = fetchFailure(impatient);
+
+        assertThat(failure).hasMessageContaining("did not finish within PT0.3S").hasMessageNotContaining(SECRET);
+        assertThat(failure.mayHaveReachedTheBank()).isTrue();
+        assertThat(bank.server().awaitDroppedConnection(Duration.ofSeconds(5))).isTrue();
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void should_raise_transport_failure_and_keep_interrupt_flag_when_interrupted_given_request_waiting_for_answer() throws Exception {
         bank.server().respondWith(200, Fixtures.read(PERIODS_STATEMENT));
         Hold hold = bank.server().holdNextRequest();

@@ -36,8 +36,8 @@ follows redirects would re-send the request, token included, to whatever host th
 
 A response body is read up to 256 MiB by default (`maximumResponseSize` on the builder raises or lowers it); a
 larger answer with a success status fails with a `FioResponseTooLargeException` instead of exhausting the heap.
-An error status keeps only the first bytes of its body that the exception needs and drops the rest as it is
-read. The limit is on the bytes received, not on the heap the parsed answer takes: a body made of millions of
+An error status keeps only the first bytes of its body that the exception needs and stops reading after the
+excerpt. The limit is on the bytes received, not on the heap the parsed answer takes: a body made of millions of
 tiny elements or objects still costs many times its size in objects, so the limit guards against a runaway
 download, not against a hostile bank host. The body stored in an exception is cut to its first 16 Ki
 characters.

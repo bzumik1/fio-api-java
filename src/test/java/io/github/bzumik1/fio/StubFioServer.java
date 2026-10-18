@@ -63,10 +63,17 @@ final class StubFioServer implements AutoCloseable {
         }
     }
 
-    private record Answer(int status, String contentType, byte[] body, Duration handlingTime, boolean stalls) {
+    private enum Delivery {
+        WHOLE,
+        STALLING,
+        TRICKLING,
+        ENDLESS
+    }
+
+    private record Answer(int status, String contentType, byte[] body, Duration handlingTime, Delivery delivery) {
 
         static Answer of(int status, String contentType, byte[] body) {
-            return new Answer(status, contentType, body, Duration.ZERO, false);
+            return new Answer(status, contentType, body, Duration.ZERO, Delivery.WHOLE);
         }
     }
 
@@ -98,6 +105,7 @@ final class StubFioServer implements AutoCloseable {
     private final Deque<Hold> pendingHolds = new ArrayDeque<>();
     private final List<Hold> allHolds = new CopyOnWriteArrayList<>();
     private final CountDownLatch closed = new CountDownLatch(1);
+    private final CountDownLatch dropped = new CountDownLatch(1);
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicInteger mostInFlight = new AtomicInteger();
     private volatile Function<RecordedRequest, Answer> fallback = request -> Answer.of(200, JSON, new byte[0]);
@@ -174,11 +182,23 @@ final class StubFioServer implements AutoCloseable {
 
     void enqueueTaking(Duration handlingTime, int status, String body) {
         requireTime();
-        enqueue(new Answer(status, JSON, body.getBytes(StandardCharsets.UTF_8), handlingTime, false));
+        enqueue(new Answer(status, JSON, body.getBytes(StandardCharsets.UTF_8), handlingTime, Delivery.WHOLE));
     }
 
     void enqueueStallingAfterPartOfBody(String partOfBody) {
-        enqueue(new Answer(200, JSON, partOfBody.getBytes(StandardCharsets.UTF_8), Duration.ZERO, true));
+        enqueue(new Answer(200, JSON, partOfBody.getBytes(StandardCharsets.UTF_8), Duration.ZERO, Delivery.STALLING));
+    }
+
+    void enqueueTricklingAfterPartOfBody(int status, String partOfBody) {
+        enqueue(new Answer(status, "text/html", partOfBody.getBytes(StandardCharsets.UTF_8), Duration.ZERO, Delivery.TRICKLING));
+    }
+
+    void enqueueEndless(int status, byte[] repeatedPart) {
+        enqueue(new Answer(status, "text/html", repeatedPart.clone(), Duration.ZERO, Delivery.ENDLESS));
+    }
+
+    boolean awaitDroppedConnection(Duration timeout) throws InterruptedException {
+        return dropped.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     Hold holdNextRequest() {
@@ -257,10 +277,15 @@ final class StubFioServer implements AutoCloseable {
         if (!answer.contentType().isEmpty()) {
             exchange.getResponseHeaders().set("Content-Type", answer.contentType());
         }
-        if (answer.stalls()) {
-            stall(exchange, answer);
-            return;
+        switch (answer.delivery()) {
+            case WHOLE -> send(exchange, answer, departure);
+            case STALLING -> stall(exchange, answer);
+            case TRICKLING -> trickle(exchange, answer);
+            case ENDLESS -> stream(exchange, answer);
         }
+    }
+
+    private void send(HttpExchange exchange, Answer answer, Departure departure) throws IOException {
         byte[] body = answer.body();
         if (body.length == 0) {
             departure.leave();
@@ -297,6 +322,46 @@ final class StubFioServer implements AutoCloseable {
         output.flush();
         await(closed);
         exchange.close();
+    }
+
+    private void trickle(HttpExchange exchange, Answer answer) throws IOException {
+        int missing = 1024;
+        exchange.sendResponseHeaders(answer.status(), answer.body().length + (long) missing);
+        OutputStream output = exchange.getResponseBody();
+        try {
+            output.write(answer.body());
+            output.flush();
+            for (int written = 0; written < missing && !closesWithin(Duration.ofMillis(20)); written++) {
+                output.write('y');
+                output.flush();
+            }
+        } catch (IOException e) {
+            dropped.countDown();
+        }
+        exchange.close();
+    }
+
+    private void stream(HttpExchange exchange, Answer answer) throws IOException {
+        exchange.sendResponseHeaders(answer.status(), 0);
+        OutputStream output = exchange.getResponseBody();
+        try {
+            while (closed.getCount() > 0) {
+                output.write(answer.body());
+                output.flush();
+            }
+        } catch (IOException e) {
+            dropped.countDown();
+        }
+        exchange.close();
+    }
+
+    private boolean closesWithin(Duration pause) {
+        try {
+            return closed.await(pause.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return true;
+        }
     }
 
     private @Nullable Hold nextHold() {

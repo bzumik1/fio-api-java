@@ -283,6 +283,7 @@ final class FioHttp {
         private final CompletableFuture<byte[]> body = new CompletableFuture<>();
         private final byte[] kept;
         private int size;
+        private Flow.@Nullable Subscription subscription;
 
         private ExcerptBody(int bytes) {
             this.kept = new byte[bytes];
@@ -295,6 +296,7 @@ final class FioHttp {
 
         @Override
         public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
             subscription.request(Long.MAX_VALUE);
         }
 
@@ -305,6 +307,10 @@ final class FioHttp {
                 buffer.get(kept, size, length);
                 size += length;
                 buffer.position(buffer.limit());
+            }
+            if (size == kept.length) {
+                requireNonNull(subscription, "subscription").cancel();
+                body.complete(Arrays.copyOf(kept, size));
             }
         }
 
