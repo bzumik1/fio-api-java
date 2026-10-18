@@ -5,6 +5,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
@@ -254,6 +255,24 @@ class AccountStatementParserTest {
         Transaction transaction = parser.parse(statementWith(MINIMAL_INFO, transaction(columns))).transactions().get(0);
 
         assertThat(transaction.columns().get(42).value()).isEqualTo(new BigDecimal(number).toPlainString());
+    }
+
+    @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
+    void should_reject_without_building_the_number_when_parsed_given_amount_as_string_with_too_many_digits(String amount) {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "\"" + amount + "\"")));
+
+        assertThatThrownBy(() -> parser.parse(json))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessageStartingWith("column 1 (Objem) is not a decimal number: '");
+    }
+
+    @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#within")
+    void should_keep_every_digit_when_parsed_given_amount_as_string_at_the_digit_bounds(String amount) {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "\"" + amount + "\"")));
+
+        assertThat(parser.parse(json).transactions().get(0).amount().amount()).isEqualTo(new BigDecimal(amount));
     }
 
     @Test

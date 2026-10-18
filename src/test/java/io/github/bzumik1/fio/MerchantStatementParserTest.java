@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -209,6 +210,20 @@ class MerchantStatementParserTest {
     @CsvSource({"true, true", "1, true", "false, false", "0, false"})
     void should_read_schema_boolean_when_parsed_given_settlement_flag(String flag, boolean expected) {
         assertThat(only(transaction("settlement", flag)).settled()).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
+    void should_reject_without_building_the_number_when_parsed_given_amount_with_too_many_digits(String amount) {
+        assertThatThrownBy(() -> parser.parse(statement(transaction("amount", amount))))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessageStartingWith("Transaction[1]/amount is not a decimal number: '");
+    }
+
+    @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#within")
+    void should_keep_every_digit_when_parsed_given_amount_at_the_digit_bounds(String amount) {
+        assertThat(only(transaction("amount", amount)).amount().amount()).isEqualTo(new BigDecimal(amount));
     }
 
     @ParameterizedTest
