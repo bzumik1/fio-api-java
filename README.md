@@ -170,8 +170,8 @@ pain.008).
 A submitted batch is only accepted: the bank processes it once an authorised person confirms it in internet
 banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the
 `batchId` the bank gave the batch (not the `instructionId` of a single movement), the debit and credit sums per
-currency as `Money`, and a message per rejected order. A batch the bank checked and refused comes back as a
-result whose `isAccepted()` is false, not as an exception.
+currency as `Money`, and the bank's messages about the batch and its orders, accepted or refused. A batch the
+bank checked and refused comes back as a result whose `isAccepted()` is false, not as an exception.
 
 When a submission fails, read the exception's `mayHaveTakenEffect()` before trying again: when it is true (a
 timeout after the request went out, an answer the client could not read or one too long to read, or HTTP 502 or
