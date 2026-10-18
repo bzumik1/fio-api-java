@@ -9,8 +9,9 @@ A Java client for the [Fio banka](https://www.fio.cz) REST API ("API Bankovnictv
 of 16 October 2025). It covers the whole API: account movements and official statements, typed or in any format
 the bank offers, the server-side bookmark, a merchant's card transactions, and the submission of payment orders.
 
-- Java 17 and newer, module `io.github.bzumik1.fio`, no framework. The only runtime dependency is Jackson 3
-  (`tools.jackson.core:jackson-databind`); HTTP goes through `java.net.http.HttpClient`.
+- Java 17 and newer, module `io.github.bzumik1.fio`, no framework. Two runtime dependencies: Jackson 3
+  (`tools.jackson.core:jackson-databind`) and the JSpecify annotations (`org.jspecify:jspecify`, a few kilobytes
+  of annotations); HTTP goes through `java.net.http.HttpClient`.
 - A fluent API over immutable records, with [JSpecify](https://jspecify.dev) nullness annotations.
 - The bank's one-request-per-30-seconds limit is handled by the client, which waits for the next slot instead of
   failing.

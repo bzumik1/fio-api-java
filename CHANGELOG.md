@@ -27,7 +27,7 @@ All notable changes to this library are recorded here. The format follows
 - Safety against a misbehaving network: an answer longer than 64 MiB is not read, the base URI has to be `https`
   with a host and without query or fragment (plain `http` only to a loopback address or after an explicit
   opt-out), and a custom `HttpClient` must not follow redirects.
-- Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations, Jackson as the only runtime
-  dependency.
+- Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations; the runtime dependencies are
+  Jackson and the JSpecify annotations.
 
 [Unreleased]: https://github.com/bzumik1/fio-api-java/commits/main

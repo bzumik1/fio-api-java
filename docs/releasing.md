@@ -41,13 +41,14 @@ After a release, bump `gradle.properties` to the next snapshot.
 2. **Publishing token.** In Central, under the account, "Generate User Token". It gives a username and a password.
 3. **Signing key.** Maven Central requires every artifact to be signed with a key published on a key server:
    ```
-   gpg --quick-generate-key "Jakub Znamenáček <znamenacekjakub@gmail.com>" ed25519 sign 3y
+   gpg --quick-generate-key "Jakub Znamenáček <znamenacekjakub@gmail.com>" rsa4096 sign 3y
    gpg --list-keys --keyid-format long            # note the key id
    gpg --keyserver keyserver.ubuntu.com --send-keys <key id>
    gpg --armor --export-secret-keys <key id>      # the whole block goes into the SIGNING_KEY secret
    git config --global user.signingkey <key id>   # so that git tag -s uses the same key
    ```
-   The key expires after three years. Before that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send
+   RSA 4096 is the key type every validator on Central's side accepts; an EdDSA key signs just as well but its
+   acceptance by the portal's validation has not been confirmed. The key expires after three years. Before that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send
    it to the key server again and replace the `SIGNING_KEY` secret; a release signed with an expired key is
    refused by Central.
 4. **Repository settings**, described in the next section; the secrets from steps 2 and 3 go into the
@@ -76,7 +77,12 @@ These are set once by the owner in the repository's Settings on GitHub; the work
   environment can also require a reviewer or restrict which branches and tags may deploy to it; restricting it
   to tags `v*` keeps a pull request from ever seeing the secrets.
 - **Tag ruleset** (Settings > Rules > Rulesets, target tags, pattern `v*`): restrict creation, update and
-  deletion to the repository owner, so only `bzumik1` can create a tag that starts a release.
+  deletion to the repository owner, so only `bzumik1` can create a tag that starts a release. Until the ruleset
+  exists, anyone with push access can start a release by pushing a tag.
+- **Visibility: public.** The build provenance attestation (`actions/attest-build-provenance` in the release
+  job) works only on public repositories; on a private one the release job fails after the version is already
+  on Central, and the release has to be created by hand as "Publication failed" below describes. Make the
+  repository public before the first tag.
 - **Branch protection on `main`** (a ruleset or the classic branch protection): require a pull request before
   merging, require the status checks "Build and test on Java 17", "Build and test on Java 21" and "Build and
   test on Java 25" to pass, block force pushes and deletions, and include administrators (do not add a bypass
@@ -101,8 +107,10 @@ failed decides what to do.
 - **Publication failed.** The job builds and signs first, uploads the jars and their `.asc` signatures as the
   workflow artifact `jars`, and only then publishes. Read the job log: a missing or expired secret, a key not
   found on the key server, or a validation error from Central (the POM, the signature, a missing javadoc jar).
-  Nothing is on Central until the plugin has uploaded and released the deployment, so after fixing the cause
-  the tag can be deleted and recreated as above. If the log shows the deployment was released, the version is
+  Nothing is on Central until the plugin has uploaded and released the deployment. A cause outside the
+  repository (a secret, the key server, Central itself) is fixed in place and the job re-run ("Re-run failed
+  jobs"; it builds and signs again and replaces the `jars` artifact); a cause in the repository is fixed on
+  `main`, after which the tag is deleted and recreated as above. If the log shows the deployment was released, the version is
   out and the tag must stay.
 - **GitHub release failed** after a successful publication. The version is on Central and cannot be changed, so
   do not delete the tag. Re-run the failed job ("Re-run failed jobs" in the Actions tab): the release job

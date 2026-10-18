@@ -57,6 +57,7 @@ tasks.jar {
 }
 
 tasks.javadoc {
+	inputs.dir(layout.projectDirectory.dir("gradle/javadoc/jdk17")).withPathSensitivity(PathSensitivity.RELATIVE)
 	options.encoding = "UTF-8"
 	(options as StandardJavadocDocletOptions).apply {
 		addBooleanOption("Xdoclint:all", true)
