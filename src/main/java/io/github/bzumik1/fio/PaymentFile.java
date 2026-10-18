@@ -1,5 +1,7 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
@@ -45,7 +47,7 @@ public record PaymentFile(PaymentFileType type, byte[] content) {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         return other instanceof PaymentFile that && that.type == type && Arrays.equals(that.content, content);
     }
 

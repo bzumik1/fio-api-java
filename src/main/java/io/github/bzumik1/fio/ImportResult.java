@@ -14,30 +14,28 @@ import static java.util.Objects.requireNonNull;
  * @param errorCode 0 when the batch was accepted, else the code Fio's documentation lists
  * @param status whether the batch was accepted, accepted with warnings, or refused
  * @param instructionId the id of the batch in the bank, when it was accepted
- * @param sumDebit the sum of the debit orders
- * @param sumCredit the sum of the credit orders
- * @param messages what the bank said about the orders, in the language chosen for the client
+ * @param sums the sums of the orders, one for each currency of the batch
+ * @param messages what the bank said about the batch and its orders, in the language chosen for the client
  */
 public record ImportResult(
         int errorCode,
         Status status,
         @Nullable Long instructionId,
-        @Nullable BigDecimal sumDebit,
-        @Nullable BigDecimal sumCredit,
+        List<Sum> sums,
         List<Message> messages) {
 
     /**
-     * Validates the components and copies the messages.
+     * Validates the components and copies the sums and the messages.
      *
      * @param errorCode the error code
      * @param status the status
      * @param instructionId the batch id
-     * @param sumDebit the debit sum
-     * @param sumCredit the credit sum
+     * @param sums the sums
      * @param messages the messages
      */
     public ImportResult {
         requireNonNull(status, "status");
+        sums = List.copyOf(sums);
         messages = List.copyOf(messages);
     }
 
@@ -66,11 +64,22 @@ public record ImportResult(
     }
 
     /**
-     * What the bank said about one order of the batch.
+     * The sums of the orders of a batch in one currency.
+     *
+     * @param currency the ISO 4217 code of the currency, as the bank names the sum, or {@code null} when it names
+     *        none
+     * @param debit the sum of the debit orders, or {@code null} when the bank left it out
+     * @param credit the sum of the credit orders, or {@code null} when the bank left it out
+     */
+    public record Sum(@Nullable String currency, @Nullable BigDecimal debit, @Nullable BigDecimal credit) {
+    }
+
+    /**
+     * What the bank said about the batch or about one order of it.
      *
      * @param orderNumber the position of the order in the batch, from 1, or {@code null} when the message is
      *        about the whole batch
-     * @param status the status of that order
+     * @param status the status of that order, or {@code null} when the bank gave none
      * @param text the message
      */
     public record Message(@Nullable Integer orderNumber, @Nullable Status status, String text) {

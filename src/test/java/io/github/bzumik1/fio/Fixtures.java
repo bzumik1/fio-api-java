@@ -11,6 +11,8 @@ final class Fixtures {
     static final String DOCUMENTATION_EXAMPLE_WITH_EPOCH_DATES = "documentation-example-epoch-dates.json";
     static final String MERCHANT_DOCUMENTATION_EXAMPLE = "merchant-documentation-example.xml";
     static final String MERCHANT_SCHEMA_EXAMPLE = "merchant-schema-example.xml";
+    static final String IMPORT_ACCEPTED = "import-accepted.xml";
+    static final String IMPORT_REFUSED = "import-refused.xml";
 
     private Fixtures() {
     }
