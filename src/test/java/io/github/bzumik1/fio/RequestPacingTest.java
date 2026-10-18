@@ -380,6 +380,7 @@ class RequestPacingTest {
             Future<?> first = pool.submit(() -> patient.bookmark().moveAfterTransaction(1));
             hold.awaitArrival();
             Future<Optional<FioRateLimitException>> second = pool.submit(queuedCall);
+            awaitWaitingForLock(queued, List.of(second));
             Future<Optional<FioRateLimitException>> third = pool.submit(queuedCall);
             awaitWaitingForLock(queued, List.of(second, third));
 
