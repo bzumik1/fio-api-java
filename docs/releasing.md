@@ -41,16 +41,17 @@ After a release, bump `gradle.properties` to the next snapshot.
 2. **Publishing token.** In Central, under the account, "Generate User Token". It gives a username and a password.
 3. **Signing key.** Maven Central requires every artifact to be signed with a key published on a key server:
    ```
-   gpg --quick-generate-key "Jakub Znamenáček <znamenacekjakub@gmail.com>" rsa4096 sign 3y
+   gpg --quick-generate-key "Jakub Znamenáček <znamenacekjakub@gmail.com>" rsa4096 sign 0
    gpg --list-keys --keyid-format long            # note the key id
    gpg --keyserver keyserver.ubuntu.com --send-keys <key id>
    gpg --armor --export-secret-keys <key id>      # the whole block goes into the SIGNING_KEY secret
    git config --global user.signingkey <key id>   # so that git tag -s uses the same key
    ```
    RSA 4096 is the key type every validator on Central's side accepts; an EdDSA key signs just as well but its
-   acceptance by the portal's validation has not been confirmed. The key expires after three years. Before
-   that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send it to the key server again and replace
-   the `SIGNING_KEY` secret; a release signed with an expired key is refused by Central.
+   acceptance by the portal's validation has not been confirmed. The `0` makes the key never expire; a release
+   signed with an expired key would be refused by Central. Should the key ever leak, revoke it
+   (`gpg --generate-revocation <key id>`, import the certificate, send the key to the key server again),
+   generate a new one and replace the `SIGNING_KEY` and `SIGNING_KEY_PASSWORD` secrets.
 4. **Repository settings**, described in the next section; the secrets from steps 2 and 3 go into the
    `maven-central` environment.
 
