@@ -49,8 +49,8 @@ After a release, bump `gradle.properties` to the next snapshot.
    ```
    RSA 4096 is the key type every validator on Central's side accepts; an EdDSA key signs just as well but its
    acceptance by the portal's validation has not been confirmed. The key expires after three years. Before
-   that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send it to the key server again and replace the `SIGNING_KEY` secret; a release signed with an expired key is
-   refused by Central.
+   that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send it to the key server again and replace
+   the `SIGNING_KEY` secret; a release signed with an expired key is refused by Central.
 4. **Repository settings**, described in the next section; the secrets from steps 2 and 3 go into the
    `maven-central` environment.
 
