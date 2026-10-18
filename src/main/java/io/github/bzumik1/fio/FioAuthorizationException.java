@@ -27,7 +27,7 @@ public final class FioAuthorizationException extends FioException {
     }
 
     /**
-     * Returns {@code false}: the bank refused the token without acting on the request.
+     * Returns {@code false}: a 401, 403 or 500 is taken as the bank's refusal, which acts on nothing.
      *
      * @return {@code false}
      */

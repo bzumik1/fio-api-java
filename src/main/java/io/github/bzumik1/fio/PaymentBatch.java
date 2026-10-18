@@ -44,7 +44,7 @@ public record PaymentBatch(List<PaymentOrder> orders) {
                         + first.from() + " and " + order.from());
             }
             if (!order.amount().currency().equals(first.amount().currency())) {
-                throw new IllegalArgumentException("Every order in a batch is in the account's currency: "
+                throw new IllegalArgumentException("Every order in a batch is in the same currency: "
                         + first.amount().currency() + " and " + order.amount().currency());
             }
         }

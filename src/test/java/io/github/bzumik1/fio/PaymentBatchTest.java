@@ -84,6 +84,6 @@ class PaymentBatchTest {
     @Test
     void should_reject_naming_both_currencies_when_created_given_orders_in_two_currencies() {
         assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), domestic(), euro()))
-                .withMessage("Every order in a batch is in the account's currency: CZK and EUR");
+                .withMessage("Every order in a batch is in the same currency: CZK and EUR");
     }
 }
