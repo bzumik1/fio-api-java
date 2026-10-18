@@ -917,6 +917,15 @@ class FioClientTest {
     }
 
     @Test
+    void should_keep_the_first_16_ki_characters_when_refused_given_error_page_of_three_byte_characters() {
+        server().respondWith(400, "text/html", "\u20ac".repeat(20_000).getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> client().transactions().sinceBookmark().fetch());
+
+        assertThat(failure.responseBody()).hasValue("\u20ac".repeat(FioException.RESPONSE_BODY_LIMIT) + "\u2026");
+    }
+
+    @Test
     void should_permit_only_documented_failures_when_switched_over_given_sealed_hierarchy() {
         List<Class<?>> permitted = List.of(FioException.class.getPermittedSubclasses());
 
