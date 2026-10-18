@@ -237,7 +237,8 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 
 Every failure is a `FioException`, an unchecked exception with the HTTP status and the first 16 Ki characters
 (16 384) of the bank's response body (token masked); a value from the body that the message quotes is cut to its
-first 200 characters. The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
+first 200 characters. The hierarchy is sealed, and the plain `FioException` is thrown too, so on Java 21 and
+newer a `switch` can name each subtype and ends with `case FioException e` for the rest:
 `FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException` (its `earliestAvailableDay()`
 reads the day the bank's answer names, when it names one), `FioTooManyTransactionsException`,
 `FioMalformedResponseException` (a success status with a body the client does not understand),
@@ -265,9 +266,12 @@ this:
   `TransactionColumn`, `Counterparty`, `Download` and the three payment orders, `DomesticPayment`, `EuroPayment`
   and `ForeignPayment`. Their accessors stay, but code that calls their canonical constructor or deconstructs
   them with a record pattern has to be revisited; construct the payment orders with their builders.
+- `FioException` may gain subtypes for failures that are a plain `FioException` until then. The class itself is
+  thrown too, so a `switch` over it names each subtype and ends with `case FioException e` for the rest, which
+  still catches a new subtype; a `catch` of the plain class does too.
 
-The sealed hierarchies `FioException`, `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes
-only in a major release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
+The sealed hierarchies `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes only in a major
+release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
 the value types `Money`, `DomesticAccount`, `ForeignAccount`, `StatementId`, `PaymentSymbols`, `Beneficiary`,
 `PaymentBatch`, `PaymentFile`, `FioToken` and `RateLimit`.
 

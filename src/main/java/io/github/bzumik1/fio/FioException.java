@@ -16,7 +16,9 @@ import java.util.OptionalInt;
  * batches in Fio internet banking, or move the bookmark of {@link FioClient.Transactions#sinceBookmark()} back,
  * before trying again.
  *
- * <p>The hierarchy is sealed, so a {@code switch} over it can be exhaustive. Every message and body has the token
+ * <p>The hierarchy is sealed, and this class itself is thrown too, so a {@code switch} can name each subtype and
+ * ends with {@code case FioException e} for the rest. A minor release may add a subtype for a failure that is a
+ * plain {@code FioException} until then, which that last case still catches. Every message and body has the token
  * masked, and a body is cut to its first {@value #RESPONSE_BODY_LIMIT} characters. The status and the body are
  * {@link OptionalInt} and {@link Optional} rather than nullable, as an exception is read far from where it is
  * thrown.
