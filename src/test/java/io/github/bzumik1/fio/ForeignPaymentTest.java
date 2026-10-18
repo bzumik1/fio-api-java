@@ -26,6 +26,7 @@ class ForeignPaymentTest {
     private static final DomesticAccount PAYER = DomesticAccount.parse("1234562");
     private static final ForeignAccount IBAN = new ForeignAccount("PK36SCBL0000001123456702");
     private static final Beneficiary KHAN = new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK");
+    private static final String ACCOUNT_OF_34_CHARACTERS = "AB12" + "3".repeat(30);
 
     static Stream<Arguments> nullComponents() {
         Money amount = Money.of("1", "USD");
@@ -56,8 +57,6 @@ class ForeignPaymentTest {
         assertThatNullPointerException().isThrownBy(create::get).withMessage(component);
     }
 
-    private static final Beneficiary AMIR = new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK");
-    private static final String ACCOUNT_OF_34_CHARACTERS = "AB12" + "3".repeat(30);
 
     @Test
     void should_carry_every_part_when_built_given_full_order() {
@@ -68,7 +67,7 @@ class ForeignPaymentTest {
                 new Money(new BigDecimal("100"), Currency.getInstance("USD")),
                 DUE,
                 "Payment a0315",
-                AMIR,
+                KHAN,
                 List.of("Payment for hotel 032013", "Room 12", "Two nights", "Thank you"),
                 ForeignPayment.Charges.BENEFICIARY,
                 "348"));
@@ -122,7 +121,7 @@ class ForeignPaymentTest {
                 Arguments.of("date", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).build()),
                 Arguments.of("beneficiary", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).date(DUE).build()),
                 Arguments.of("payment reason", (Supplier<ForeignPayment>) () -> started().amount(Money.czk("1")).date(DUE)
-                        .beneficiary(AMIR).remittanceInfo("x").build()));
+                        .beneficiary(KHAN).remittanceInfo("x").build()));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -134,7 +133,7 @@ class ForeignPaymentTest {
     @Test
     void should_reject_when_created_given_no_payment_reason() {
         assertThatNullPointerException().isThrownBy(() -> new ForeignPayment(DomesticAccount.parse("1234562"),
-                new ForeignAccount("PK36SCBL0000001123456702"), "ALFHPKKA", Money.czk("1"), DUE, null, AMIR, List.of("x"),
+                new ForeignAccount("PK36SCBL0000001123456702"), "ALFHPKKA", Money.czk("1"), DUE, null, KHAN, List.of("x"),
                 ForeignPayment.Charges.SHARED, null)).withMessage("paymentReason");
     }
 
@@ -148,7 +147,7 @@ class ForeignPaymentTest {
     @Test
     void should_reject_when_built_given_no_remittance_line() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> started().amount(Money.czk("1")).date(DUE).beneficiary(AMIR).paymentReason("348").build())
+                .isThrownBy(() -> started().amount(Money.czk("1")).date(DUE).beneficiary(KHAN).paymentReason("348").build())
                 .withMessage("A payment outside SEPA needs at least one remittance line");
     }
 
