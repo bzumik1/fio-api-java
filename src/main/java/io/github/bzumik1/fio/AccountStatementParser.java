@@ -80,7 +80,8 @@ final class AccountStatementParser {
         try {
             return DomesticAccount.parse(bankCode == null ? number : number + "/" + bankCode);
         } catch (IllegalArgumentException e) {
-            throw new MalformedResponseException(accountId.label() + " is not an account number: '" + number + "'", e);
+            throw new MalformedResponseException(
+                    accountId.label() + " is not an account number: '" + MalformedResponseException.excerpt(number) + "'", e);
         }
     }
 
@@ -203,7 +204,8 @@ final class AccountStatementParser {
 
     private static String plain(BigDecimal number) {
         if (number.scale() > MAXIMUM_SCALE || number.scale() < -MAXIMUM_SCALE) {
-            throw new MalformedResponseException("The body holds a number with an exponent no statement needs: " + number);
+            throw new MalformedResponseException(
+                    "The body holds a number with an exponent no statement needs: " + MalformedResponseException.excerpt(number.toString()));
         }
         return number.toPlainString();
     }

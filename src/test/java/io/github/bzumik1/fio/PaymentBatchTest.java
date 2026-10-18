@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
+import static io.github.bzumik1.fio.PaymentSamples.domesticBuilder;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
 import static io.github.bzumik1.fio.PaymentSamples.foreign;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,5 +63,21 @@ class PaymentBatchTest {
         assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of(domestic(), null)).withMessage("orders[1] is null");
         assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of((PaymentOrder[]) null)).withMessage("orders");
         assertThatNullPointerException().isThrownBy(() -> new PaymentBatch(null)).withMessage("orders");
+    }
+
+    @Test
+    void should_reject_naming_both_accounts_when_created_given_orders_from_two_accounts() {
+        DomesticPayment fromAnotherAccount = domesticBuilder().from("2400222222/2010").build();
+
+        assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), euro(), fromAnotherAccount))
+                .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
+                        + "1234562 and 2400222222/2010");
+    }
+
+    @Test
+    void should_keep_orders_when_created_given_same_account_written_with_and_without_bank_code() {
+        DomesticPayment withBankCode = domesticBuilder().from("1234562/2010").build();
+
+        assertThat(PaymentBatch.of(domestic(), withBankCode).orders()).containsExactly(domestic(), withBankCode);
     }
 }

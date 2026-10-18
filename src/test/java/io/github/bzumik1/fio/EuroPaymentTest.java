@@ -19,9 +19,45 @@ import static io.github.bzumik1.fio.PaymentSamples.euroBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EuroPaymentTest {
+
+    private static final DomesticAccount PAYER = DomesticAccount.parse("1234562");
+    private static final ForeignAccount IBAN = new ForeignAccount("AT611904300234573201");
+    private static final Beneficiary HANS = Beneficiary.named("Hans");
+
+    static Stream<Arguments> nullComponents() {
+        PaymentSymbols none = PaymentSymbols.none();
+        Money amount = euro("1");
+        List<String> lines = List.of();
+        EuroPayment.Type standard = EuroPayment.Type.STANDARD;
+        return Stream.of(
+                argumentSet("from", "from", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(null, IBAN, null, amount, none, DUE, null, HANS, lines, null, standard)),
+                argumentSet("to", "to", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, null, null, amount, none, DUE, null, HANS, lines, null, standard)),
+                argumentSet("amount", "amount", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, null, none, DUE, null, HANS, lines, null, standard)),
+                argumentSet("symbols", "symbols", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, amount, null, DUE, null, HANS, lines, null, standard)),
+                argumentSet("date", "date", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, amount, none, null, null, HANS, lines, null, standard)),
+                argumentSet("beneficiary", "beneficiary", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, amount, none, DUE, null, null, lines, null, standard)),
+                argumentSet("remittanceInfo", "remittanceInfo", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, amount, none, DUE, null, HANS, null, null, standard)),
+                argumentSet("type", "type", (Supplier<EuroPayment>) () ->
+                        new EuroPayment(PAYER, IBAN, null, amount, none, DUE, null, HANS, lines, null, null)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullComponents")
+    void should_reject_naming_the_component_when_created_given_null(String component, Supplier<EuroPayment> create) {
+        assertThatNullPointerException().isThrownBy(create::get).withMessage(component);
+    }
 
     @Test
     void should_carry_every_part_when_built_given_full_order() {

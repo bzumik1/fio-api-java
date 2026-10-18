@@ -242,6 +242,26 @@ class ImportResponseParserTest {
     }
 
     @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
+    void should_reject_without_building_the_number_when_parsed_given_sum_with_too_many_digits(String text) {
+        String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumDebet>" + text
+                + "</sumDebet></sum></sums>");
+
+        assertThatThrownBy(() -> parser.parse(body))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessageStartingWith("The sumDebet is not a number: '");
+    }
+
+    @ParameterizedTest
+    @MethodSource("io.github.bzumik1.fio.DecimalBounds#within")
+    void should_keep_every_digit_when_parsed_given_sum_at_the_digit_bounds(String text) {
+        ImportResult result = parser.parse(response(
+                "<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumCredit>" + text + "</sumCredit></sum></sums>"));
+
+        assertThat(result.sums()).containsExactly(new Sum("CZK", null, new BigDecimal(text)));
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"1e3", "1E999999999", "NaN", "0x1"})
     void should_reject_naming_the_sum_when_parsed_given_sum_that_is_not_a_plain_decimal(String text) {
         String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum><sumCredit>" + text

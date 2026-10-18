@@ -21,7 +21,7 @@ record RawValue(String label, @Nullable String text) {
     private static final ZoneId BANK_TIME_ZONE = ZoneId.of("Europe/Prague");
     private static final Pattern DATE_WITH_OPTIONAL_OFFSET = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})(Z|[+-]\\d{2}:?\\d{2})?");
     private static final Pattern EPOCH_MILLISECONDS = Pattern.compile("-?\\d{1,18}");
-    private static final Pattern DECIMAL = Pattern.compile("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)");
+    private static final Pattern DECIMAL = Pattern.compile("[+-]?(?:\\d{1,40}(?:\\.\\d{0,1000})?|\\.\\d{1,1000})");
 
     @Nullable String optionalText() {
         return text == null || text.isBlank() ? null : text;
@@ -119,7 +119,8 @@ record RawValue(String label, @Nullable String text) {
         try {
             return conversion.apply(value);
         } catch (IllegalArgumentException | DateTimeException e) {
-            throw new MalformedResponseException(label + " is not " + expected + ": '" + value + "'", e);
+            throw new MalformedResponseException(
+                    label + " is not " + expected + ": '" + MalformedResponseException.excerpt(value) + "'", e);
         }
     }
 }

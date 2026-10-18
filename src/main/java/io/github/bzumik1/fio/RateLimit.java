@@ -39,8 +39,9 @@ public final class RateLimit {
     /**
      * Waits for a free slot, at most the given time per call.
      *
-     * @param maximumWait the longest total wait one call may spend, positive
+     * @param maximumWait the longest total wait one call may spend, positive and at most one day
      * @return the policy
+     * @throws IllegalArgumentException when the duration is not positive or longer than one day
      */
     public static RateLimit waitUpTo(Duration maximumWait) {
         requireNonNull(maximumWait, "maximumWait");

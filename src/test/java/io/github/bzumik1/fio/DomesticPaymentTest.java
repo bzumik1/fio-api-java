@@ -16,8 +16,38 @@ import static io.github.bzumik1.fio.PaymentSamples.domesticBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 class DomesticPaymentTest {
+
+    private static final DomesticAccount PAYER = DomesticAccount.parse("1234562");
+    private static final DomesticAccount RECIPIENT = DomesticAccount.parse("19-2000145399/0800");
+
+    static Stream<Arguments> nullComponents() {
+        PaymentSymbols none = PaymentSymbols.none();
+        Money amount = Money.czk("1");
+        DomesticPayment.Type standard = DomesticPayment.Type.STANDARD;
+        return Stream.of(
+                argumentSet("from", "from", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(null, RECIPIENT, amount, none, DUE, null, null, null, standard)),
+                argumentSet("to", "to", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(PAYER, null, amount, none, DUE, null, null, null, standard)),
+                argumentSet("amount", "amount", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(PAYER, RECIPIENT, null, none, DUE, null, null, null, standard)),
+                argumentSet("symbols", "symbols", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(PAYER, RECIPIENT, amount, null, DUE, null, null, null, standard)),
+                argumentSet("date", "date", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(PAYER, RECIPIENT, amount, none, null, null, null, null, standard)),
+                argumentSet("type", "type", (Supplier<DomesticPayment>) () ->
+                        new DomesticPayment(PAYER, RECIPIENT, amount, none, DUE, null, null, null, null)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullComponents")
+    void should_reject_naming_the_component_when_created_given_null(String component, Supplier<DomesticPayment> create) {
+        assertThatNullPointerException().isThrownBy(create::get).withMessage(component);
+    }
 
     @Test
     void should_carry_every_part_when_built_given_full_order() {

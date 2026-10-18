@@ -123,18 +123,35 @@ ImportResult result = fio.payments().batch()
                 .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .variableSymbol("20260001")
                 .messageForRecipient("Invoice 2026-0001"))
-        .euro(payment -> payment
+        .domestic(payment -> payment
                 .from("2400222222/2010")
+                .to("2001234561/0100")
+                .amount(Money.czk("380.50"))
+                .date(LocalDate.now(ZoneId.of("Europe/Prague")))
+                .variableSymbol("20260002"))
+        .submit();
+
+if (!result.isAccepted()) {
+    result.messages().forEach(message -> System.err.println(message.text()));
+}
+```
+
+A token belongs to one account, and every order in a batch is from that account and in its currency; a batch
+with orders from two accounts is refused before anything is sent. From a euro account, with its own token, the
+same batch takes SEPA payments:
+
+```java
+FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_EUR_TOKEN")).build();
+
+ImportResult result = fio.payments().batch()
+        .euro(payment -> payment
+                .from("2400333333/2010")
                 .to("AT611904300234573201")
                 .bic("ABAGATWWXXX")
                 .amount(Money.of("99.90", "EUR"))
                 .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .beneficiary(Beneficiary.named("Example GmbH")))
         .submit();
-
-if (!result.isAccepted()) {
-    result.messages().forEach(message -> System.err.println(message.text()));
-}
 ```
 
 A batch is built from `DomesticPayment`, `EuroPayment` (SEPA) and `ForeignPayment` orders, each with a builder
@@ -150,8 +167,11 @@ result whose `isAccepted()` is false, not as an exception.
 
 When a submission fails with `FioTransportException`, read `mayHaveReachedTheBank()` before trying again: a
 timeout after the request went out means the batch may already be waiting for authorisation, and submitting it
-again would pay twice. Check the pending batches in internet banking first. The same holds for
-`sinceBookmark()`, where an answer lost on the way has already moved the bookmark.
+again would pay twice. A `FioMalformedResponseException`, or a plain `FioException` without a status for an
+answer over the size limit, is worse still: the bank received the batch and answered, so it may have accepted it.
+In all three cases check the pending batches in internet banking first. The same holds for `sinceBookmark()`,
+where an answer lost on the way or one the client could not read may already have moved the bookmark: move it
+back to the last stored movement and download the movements again.
 
 ### Configuration
 
@@ -185,9 +205,10 @@ enough for every download; submitting payments needs a token allowed to do so.
 
 `FioToken` never shows its value: `toString()` prints `FioToken[***]`, and every message, URL, response body and
 cause the client puts into an exception has the token replaced by `***`. The token still travels in the URL path
-of every download, by Fio's design, so the client refuses a `baseUri` that is not `https` (except on localhost). `FioToken.of(value)` strips surrounding
-whitespace, so a token read from a file with a trailing newline works; `FioToken.fromEnvironment("FIO_TOKEN")`
-reads it from an environment variable.
+of every download, by Fio's design, so the client refuses a `baseUri` that is not `https` (plain `http` only to
+the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allowPlainHttp()`).
+`FioToken.of(value)` strips surrounding whitespace, so a token read from a file with a trailing newline works;
+`FioToken.fromEnvironment("FIO_TOKEN")` reads it from an environment variable.
 
 ## Limits of the bank, and how the client handles them
 
@@ -195,9 +216,9 @@ reads it from an environment variable.
   its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only when the
   wait would exceed `RateLimit.maximumWait()` does the request fail with `FioRateLimitException`, whose
   `retryAfter()` says when the next request may go.
-- **90 days of history.** Movements older than 90 days (counted from today, Prague time) are available only for 10
-  minutes after the account holder unlocks the full history for the token in internet banking. Without it the bank
-  answers HTTP 422, which becomes `FioHistoryLockedException`.
+- **90 days of history.** Data older than 90 days (counted from today, Prague time), movements, statements and
+  card transactions alike, is available only for 10 minutes after the account holder unlocks the full history for
+  the token in internet banking. Without it the bank answers HTTP 422, which becomes `FioHistoryLockedException`.
 - **50 000 movements per download.** A larger answer is refused with HTTP 413, which becomes
   `FioTooManyTransactionsException`; ask for a shorter period or move the bookmark forward.
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
@@ -208,24 +229,42 @@ reads it from an environment variable.
 
 ## Errors
 
-Every failure is a `FioException`, an unchecked exception with the HTTP status and the first 16 KiB of the
-bank's response body (token masked). The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and
-newer: `FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException` (its
-`earliestAvailableDay()` reads the day the bank's answer names, when it names one),
-`FioTooManyTransactionsException`, `FioMalformedResponseException` (a success status with a body the client does
-not understand; retrying will not help), `FioTransportException` (no answer: connection, timeout, interruption;
-its `mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any
-other status.
+Every failure is a `FioException`, an unchecked exception with the HTTP status and the first 16 Ki characters
+(16 384) of the bank's response body (token masked); a value from the body that the message quotes is cut to its
+first 200 characters. The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
+`FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException` (its `earliestAvailableDay()`
+reads the day the bank's answer names, when it names one), `FioTooManyTransactionsException`,
+`FioMalformedResponseException` (a success status with a body the client does not understand),
+`FioTransportException` (no answer: connection, TLS handshake, timeout, interruption; its
+`mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any other
+status, or without a status for an answer over 64 MiB.
+
+A `FioMalformedResponseException`, and a plain `FioException` for an answer over 64 MiB, come after the bank
+received the request and acted on it. A download by period or number can be asked again; after `sinceBookmark()`
+move the bookmark back before downloading again, and after a payment submission check the pending batches in
+internet banking before submitting again.
 
 ## Compatibility
 
-The public API is what `module-info.java` exports, under semantic versioning, with two things to know:
-`FioClient` and the interfaces nested in it may gain methods in a minor release, so implement them outside this
-library (as a test fake, say) only at your own risk; and the enums `TransactionType`, `CardTransactionType` and the format enums
-may gain constants, so a `switch` over them needs a `default`. The records that carry bank data (`Transaction`,
-`AccountInfo`, `CardTransaction`, `ImportResult`) may gain components in a minor release when Fio adds a field;
-their accessors stay, but code that calls their canonical constructor or deconstructs them with a record pattern
-has to be revisited.
+The public API is what `module-info.java` exports, under semantic versioning. A minor release may change only
+this:
+
+- `FioClient` and the interfaces nested in it may gain methods as Fio extends its API, so implement them outside
+  this library (as a test fake, say) only at your own risk.
+- The enums that follow Fio's lists may gain constants: `TransactionType`, `CardTransactionType`,
+  `TransactionFormat`, `StatementFormat`, `MerchantFormat`, `DomesticPayment.Type`, `EuroPayment.Type`,
+  `ForeignPayment.Charges`, `PaymentFileType` and `ImportResult.Status`. Fio's own list of payment types has
+  dropped a type and gained instant payments before. A `switch` over any enum of the library needs a `default`.
+- These records may gain components when Fio adds a field: `Transaction`, `AccountInfo`, `AccountStatement`,
+  `CardTransaction`, `MerchantStatement`, `ImportResult`, `ImportResult.Sum`, `ImportResult.Message`,
+  `TransactionColumn`, `Counterparty`, `Download` and the three payment orders, `DomesticPayment`, `EuroPayment`
+  and `ForeignPayment`. Their accessors stay, but code that calls their canonical constructor or deconstructs
+  them with a record pattern has to be revisited; construct the payment orders with their builders.
+
+The sealed hierarchies `FioException`, `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes
+only in a major release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
+the value types `Money`, `DomesticAccount`, `ForeignAccount`, `StatementId`, `PaymentSymbols`, `Beneficiary`,
+`PaymentBatch`, `PaymentFile`, `FioToken` and `RateLimit`.
 
 Bad input fails before anything is sent: a malformed value (an account number that fails the bank's checksum, a
 symbol that is not digits, a period that ends before it starts) is an `IllegalArgumentException` that names the
@@ -234,7 +273,8 @@ problem, a payment builder with a required part missing is an `IllegalStateExcep
 
 The client refuses a base URI other than `https`, because the token travels in the request path; plain `http` is
 accepted for the loopback addresses `127.0.0.1` and `[::1]`, where test stubs live, or anywhere after the
-builder's `allowPlainHttp()`. A custom `HttpClient` has to keep the JDK's default of not following redirects.
+builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` checks the two together. A custom
+`HttpClient` has to keep the JDK's default of not following redirects.
 
 ## The model
 

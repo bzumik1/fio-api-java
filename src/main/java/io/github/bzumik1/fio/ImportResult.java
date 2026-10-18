@@ -51,6 +51,9 @@ public record ImportResult(
 
     /**
      * The outcome of a batch.
+     *
+     * <p>Constants may be added in a minor release when Fio answers with a new status, so a {@code switch} over
+     * this type needs a {@code default} branch.
      */
     public enum Status {
 

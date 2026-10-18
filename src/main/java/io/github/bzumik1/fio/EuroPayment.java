@@ -18,8 +18,8 @@ import static java.util.Objects.requireNonNull;
  *
  * @param from the payer's account
  * @param to the recipient's account, by IBAN
- * @param bic the BIC of the recipient's bank, optional within SEPA (Fio's schema types it as free text of up
- *        to 50 characters; this library requires a BIC)
+ * @param bic the BIC of the recipient's bank, or {@code null}, as SEPA does not need it; when given it has to
+ *        be a well-formed BIC of 8 or 11 characters, although Fio's schema types it as free text of up to 50
  * @param amount the amount, in euro
  * @param symbols the variable, constant and specific symbols
  * @param date the day the payment is due
@@ -104,6 +104,9 @@ public record EuroPayment(
 
     /**
      * The kind of SEPA order, which Fio calls the payment type.
+     *
+     * <p>Fio's list of payment types changes, so constants may be added in a minor release and a {@code switch}
+     * over this type needs a {@code default} branch.
      */
     public enum Type {
 
@@ -128,6 +131,11 @@ public record EuroPayment(
     /**
      * Builds a {@link EuroPayment}. The payer's account, the IBAN, the amount, the date and the beneficiary's
      * name are required; the type is {@link Type#STANDARD} unless set.
+     *
+     * <p>The setters that read text refuse a malformed payer's account, a blank IBAN or an invalid beneficiary's
+     * name at once with an {@link IllegalArgumentException}; {@link #build()} refuses a missing required part with
+     * an {@link IllegalStateException} and checks every other part, the IBAN's check digits among them, as
+     * {@link EuroPayment} describes.
      */
     public static final class Builder {
 
@@ -164,6 +172,7 @@ public record EuroPayment(
          *
          * @param from the account number
          * @return this builder
+         * @throws IllegalArgumentException when the text is not an account number
          */
         public Builder from(String from) {
             return from(DomesticAccount.parse(from));
@@ -174,6 +183,7 @@ public record EuroPayment(
          *
          * @param iban the IBAN, spaces allowed
          * @return this builder
+         * @throws IllegalArgumentException when the text is blank
          */
         public Builder to(String iban) {
             return to(new ForeignAccount(iban));
@@ -283,6 +293,7 @@ public record EuroPayment(
          *
          * @param name the name, up to 50 characters
          * @return this builder
+         * @throws IllegalArgumentException when the name is invalid, as {@link Beneficiary#named(String)} describes
          */
         public Builder beneficiary(String name) {
             return beneficiary(Beneficiary.named(name));
@@ -326,7 +337,7 @@ public record EuroPayment(
          *
          * @return the payment
          * @throws IllegalStateException when a required part is missing
-         * @throws IllegalArgumentException when a part is invalid
+         * @throws IllegalArgumentException when a part is invalid, as {@link EuroPayment} describes
          */
         public EuroPayment build() {
             return new EuroPayment(

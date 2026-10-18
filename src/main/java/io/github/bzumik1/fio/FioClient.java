@@ -115,6 +115,10 @@ public interface FioClient {
          * repeated without {@link Bookmark moving the bookmark back}. A {@link FioTransportException} whose
          * {@link FioTransportException#mayHaveReachedTheBank()} is {@code true} is such a loss: the bank may have
          * answered and moved the bookmark, so move it back to the last stored movement before downloading again.
+         * A {@link FioMalformedResponseException} from {@link TransactionRequest#fetch()} is one too: the bank
+         * answered and may have moved the bookmark although the answer could not be read, so move the bookmark
+         * back to the last stored movement and download the movements again; the same holds for a plain
+         * {@link FioException} without a status for an answer over the size limit.
          *
          * @return the chosen download
          */
@@ -133,6 +137,8 @@ public interface FioClient {
          * @throws FioHistoryLockedException when the period starts more than 90 days back and the account holder
          *         has not unlocked the full history for the token
          * @throws FioTooManyTransactionsException when the answer would hold more than 50 000 movements
+         * @throws FioMalformedResponseException when the answer is not the JSON this client reads; after
+         *         {@link Transactions#sinceBookmark()} the bank may have moved the bookmark, as described there
          * @throws FioException when the bank refuses or does not answer the request
          */
         AccountStatement fetch();
@@ -176,9 +182,11 @@ public interface FioClient {
         /**
          * Chooses an official statement by its number.
          *
-         * @param year the year of the statement
+         * @param year the year of the statement, four digits
          * @param number the number of the statement within the year, from 1
          * @return the chosen download
+         * @throws IllegalArgumentException when the year is not four digits or the number is below 1, as
+         *         {@link StatementId} describes
          */
         default StatementRequest number(int year, int number) {
             return number(new StatementId(year, number));
@@ -203,6 +211,8 @@ public interface FioClient {
          * Downloads the statement as typed records (the JSON format).
          *
          * @return the statement
+         * @throws FioHistoryLockedException when the statement covers days more than 90 days back and the account
+         *         holder has not unlocked the full history for the token, as Fio documents for every download
          * @throws FioException when the bank refuses or does not answer the request
          */
         AccountStatement fetch();
@@ -212,6 +222,8 @@ public interface FioClient {
          *
          * @param format the format of the answer
          * @return the answer
+         * @throws FioHistoryLockedException when the statement covers days more than 90 days back and the account
+         *         holder has not unlocked the full history for the token, as Fio documents for every download
          * @throws FioException when the bank refuses or does not answer the request
          */
         Download download(StatementFormat format);
@@ -242,6 +254,8 @@ public interface FioClient {
          * Downloads the card transactions as typed records (the XML format).
          *
          * @return the merchant statement
+         * @throws FioHistoryLockedException when the period starts more than 90 days back and the account holder
+         *         has not unlocked the full history for the token, as Fio documents for every download
          * @throws FioException when the bank refuses or does not answer the request
          */
         MerchantStatement fetch();
@@ -251,6 +265,8 @@ public interface FioClient {
          *
          * @param format the format of the answer
          * @return the answer
+         * @throws FioHistoryLockedException when the period starts more than 90 days back and the account holder
+         *         has not unlocked the full history for the token, as Fio documents for every download
          * @throws FioException when the bank refuses or does not answer the request
          */
         Download download(MerchantFormat format);
@@ -301,10 +317,15 @@ public interface FioClient {
          * @param batch the orders
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
-         * @throws FioException when the bank does not answer, or refuses the request before checking the orders; a
-         *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
-         *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
-         *         before submitting again
+         * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
+         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
+         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
+         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
+         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
+         *         answer over the size limit; after the last two the bank has received the batch and may have
+         *         accepted it
+         * @throws IllegalArgumentException when the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, the most the bank imports at once
          */
         ImportResult submit(PaymentBatch batch);
 
@@ -314,10 +335,13 @@ public interface FioClient {
          * @param file the file and its format
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
-         * @throws FioException when the bank does not answer, or refuses the request before checking the orders; a
-         *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
-         *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
-         *         before submitting again
+         * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
+         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
+         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
+         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
+         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
+         *         answer over the size limit; after the last two the bank has received the batch and may have
+         *         accepted it
          */
         ImportResult upload(PaymentFile file);
     }
@@ -378,13 +402,18 @@ public interface FioClient {
          *
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
-         * @throws FioException when the bank does not answer, or refuses the request before checking the orders; a
-         *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
-         *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
-         *         before submitting again
-         * @throws IllegalStateException when the batch is empty or was already submitted; a {@link PaymentBatch}
-         *         built by hand refuses to be empty with an {@link IllegalArgumentException} instead, as there
-         *         it is an argument
+         * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
+         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
+         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
+         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
+         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
+         *         answer over the size limit; after the last two the bank has received the batch and may have
+         *         accepted it
+         * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
+         *         one the token belongs to), the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the first three are an
+         *         {@link IllegalArgumentException} from {@link PaymentBatch} and {@link Payments#submit(PaymentBatch)},
+         *         where the batch is an argument
          */
         ImportResult submit();
     }
@@ -401,6 +430,8 @@ public interface FioClient {
         private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(2);
         private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "[::1]");
+        private static final String HTTPS = "https";
+        private static final String HTTP = "http";
 
         private final FioToken token;
         private URI baseUri = DEFAULT_BASE_URI;
@@ -420,14 +451,15 @@ public interface FioClient {
         /**
          * Points the client at another address, for example a stub server in tests. The token travels in the
          * request path, so the address has to be {@code https}; plain {@code http} is accepted only for the
-         * loopback addresses {@code 127.0.0.1} and {@code [::1]}, or after {@link #allowPlainHttp()}.
+         * loopback addresses {@code 127.0.0.1} and {@code [::1]}, or with {@link #allowPlainHttp()}, which
+         * {@link #build()} checks, so the two can be called in either order.
          *
-         * @param baseUri an absolute URI with a host and without user info, query or fragment,
-         *        {@link #DEFAULT_BASE_URI} by default
+         * @param baseUri an absolute {@code https} or {@code http} URI with a host and without user info, query
+         *        or fragment, {@link #DEFAULT_BASE_URI} by default
          * @return this builder
          * @throws IllegalArgumentException when the URI is relative, has no host the JDK can send a request to,
-         *         carries user info, a query or a fragment, or is plain {@code http} to a host that is not a
-         *         loopback address
+         *         carries user info, a query or a fragment, or its scheme is neither {@code https} nor
+         *         {@code http}
          */
         public Builder baseUri(URI baseUri) {
             requireNonNull(baseUri, "baseUri");
@@ -441,17 +473,18 @@ public interface FioClient {
                 throw new IllegalArgumentException(
                         "The Fio API base URI must not carry user info, a query or a fragment, the request path is appended to it: " + baseUri);
             }
-            if (!"https".equals(baseUri.getScheme()) && !isPlainHttpToLoopback(baseUri)) {
-                throw new IllegalArgumentException("The Fio API base URI must use https, the token travels in it: " + baseUri);
+            if (!HTTPS.equalsIgnoreCase(baseUri.getScheme()) && !HTTP.equalsIgnoreCase(baseUri.getScheme())) {
+                throw new IllegalArgumentException(httpsRequired(baseUri));
             }
             this.baseUri = baseUri;
             return this;
         }
 
         /**
-         * Lets {@link #baseUri(URI)} accept plain {@code http} to any host, for a stub on another machine or in
-         * another container. Every request then carries the token unencrypted to that host, so this is for tests
-         * only; the production address needs nothing of the kind.
+         * Lets the {@link #baseUri(URI) base URI} be plain {@code http} to any host, for a stub on another machine
+         * or in another container, whether it is set before or after this call. Every request then carries the
+         * token unencrypted to that host, so this is for tests only; the production address needs nothing of the
+         * kind.
          *
          * @return this builder
          */
@@ -497,6 +530,7 @@ public interface FioClient {
          *
          * @param requestTimeout a positive duration, 2 minutes by default
          * @return this builder
+         * @throws IllegalArgumentException when the duration is zero or negative
          */
         public Builder requestTimeout(Duration requestTimeout) {
             requireNonNull(requestTimeout, "requestTimeout");
@@ -523,6 +557,7 @@ public interface FioClient {
          *
          * @param locale Czech, Slovak or English; English by default
          * @return this builder
+         * @throws IllegalArgumentException when the locale's language is not Czech, Slovak or English
          */
         public Builder messageLocale(Locale locale) {
             requireNonNull(locale, "locale");
@@ -538,8 +573,9 @@ public interface FioClient {
             return this;
         }
 
-        private boolean isPlainHttpToLoopback(URI uri) {
-            return "http".equals(uri.getScheme()) && (plainHttpAllowed || LOOPBACK_HOSTS.contains(uri.getHost()));
+        private static String httpsRequired(URI uri) {
+            return "The Fio API base URI must use https, the token travels in it; plain http is accepted only for "
+                    + "127.0.0.1 and [::1], or after allowPlainHttp(): " + uri;
         }
 
         Sleeper sleeper() {
@@ -552,11 +588,18 @@ public interface FioClient {
         }
 
         /**
-         * Builds the client.
+         * Builds the client. Each call builds an independent client with its own rate limiting and, unless one
+         * was {@link #httpClient(HttpClient) given}, its own HTTP client; two clients built for the same token
+         * cannot keep the 30 seconds between each other's requests, so build one and share it.
          *
          * @return the client
+         * @throws IllegalStateException when the base URI is plain {@code http} to a host other than
+         *         {@code 127.0.0.1} and {@code [::1]} and {@link #allowPlainHttp()} was not called
          */
         public FioClient build() {
+            if (HTTP.equalsIgnoreCase(baseUri.getScheme()) && !plainHttpAllowed && !LOOPBACK_HOSTS.contains(baseUri.getHost())) {
+                throw new IllegalStateException(httpsRequired(baseUri));
+            }
             RequestPacer pacer = new RequestPacer(rateLimit, clock, sleeper);
             FioHttp http = new FioHttp(
                     token, baseUri, httpClientOrDefault(), clock, requestTimeout, pacer, messageLocale, responseSizeLimit);

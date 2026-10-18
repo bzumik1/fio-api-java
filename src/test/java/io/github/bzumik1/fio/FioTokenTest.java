@@ -83,6 +83,34 @@ class FioTokenTest {
     }
 
     @Test
+    void should_mask_the_beginning_of_the_token_when_masking_excerpt_given_token_cut_short_by_the_cut_mark() {
+        FioToken token = FioToken.of(SECRET);
+
+        assertThat(token.maskExcerpt("GET /last/" + SECRET.substring(0, 20) + "\u2026"))
+                .isEqualTo("GET /last/***\u2026");
+    }
+
+    @Test
+    void should_mask_whole_tokens_and_each_cut_beginning_when_masking_excerpt_given_several_cut_marks() {
+        FioToken token = FioToken.of(SECRET);
+
+        assertThat(token.maskExcerpt(SECRET + " '" + SECRET.substring(0, 1) + "\u2026' and '"
+                + SECRET.substring(0, SECRET.length() - 1) + "\u2026' rest"))
+                .isEqualTo("*** '***\u2026' and '***\u2026' rest");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"plain text", "\u2026 at the start", "cut after other text\u2026", "cut after the end of a token: x\u2026"})
+    void should_leave_text_alone_when_masking_excerpt_given_no_beginning_of_the_token_before_a_cut_mark(String text) {
+        assertThat(FioToken.of(SECRET).maskExcerpt(text)).isEqualTo(text);
+    }
+
+    @Test
+    void should_find_value_when_asked_given_text_holding_only_a_cut_beginning_of_the_token() {
+        assertThat(FioToken.of(SECRET).occursIn("value '" + SECRET.substring(0, 30) + "\u2026'")).isTrue();
+    }
+
+    @Test
     void should_leave_null_alone_when_masking_given_no_text() {
         assertThat(FioToken.of(SECRET).mask(null)).isNull();
     }

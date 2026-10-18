@@ -88,6 +88,9 @@ public record ForeignPayment(
 
     /**
      * Who pays the fees of a payment abroad, as in SWIFT's details of charges.
+     *
+     * <p>Constants may be added in a minor release when Fio imports a new option, so a {@code switch} over this
+     * type needs a {@code default} branch.
      */
     public enum Charges {
 
@@ -112,6 +115,10 @@ public record ForeignPayment(
     /**
      * Builds a {@link ForeignPayment}. Everything but the comment and the remittance lines after the first is
      * required; the charges are {@link Charges#SHARED} unless set.
+     *
+     * <p>The setters that read text refuse a malformed payer's account or a blank recipient's account at once with
+     * an {@link IllegalArgumentException}; {@link #build()} refuses a missing required part with an
+     * {@link IllegalStateException} and checks every other part as {@link ForeignPayment} describes.
      */
     public static final class Builder {
 
@@ -145,6 +152,7 @@ public record ForeignPayment(
          *
          * @param from the account number
          * @return this builder
+         * @throws IllegalArgumentException when the text is not an account number
          */
         public Builder from(String from) {
             return from(DomesticAccount.parse(from));
@@ -155,6 +163,7 @@ public record ForeignPayment(
          *
          * @param account an IBAN or a local account number
          * @return this builder
+         * @throws IllegalArgumentException when the text is blank
          */
         public Builder to(String account) {
             return to(new ForeignAccount(account));
@@ -264,7 +273,7 @@ public record ForeignPayment(
          *
          * @return the payment
          * @throws IllegalStateException when a required part is missing
-         * @throws IllegalArgumentException when a part is invalid
+         * @throws IllegalArgumentException when a part is invalid, as {@link ForeignPayment} describes
          */
         public ForeignPayment build() {
             return new ForeignPayment(

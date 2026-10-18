@@ -19,8 +19,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 class ForeignPaymentTest {
+
+    private static final DomesticAccount PAYER = DomesticAccount.parse("1234562");
+    private static final ForeignAccount IBAN = new ForeignAccount("PK36SCBL0000001123456702");
+    private static final Beneficiary KHAN = new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK");
+
+    static Stream<Arguments> nullComponents() {
+        Money amount = Money.of("1", "USD");
+        List<String> lines = List.of("Hotel");
+        ForeignPayment.Charges shared = ForeignPayment.Charges.SHARED;
+        return Stream.of(
+                argumentSet("from", "from", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(null, IBAN, "ALFHPKKA", amount, DUE, null, KHAN, lines, shared, "348")),
+                argumentSet("to", "to", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, null, "ALFHPKKA", amount, DUE, null, KHAN, lines, shared, "348")),
+                argumentSet("bic", "bic", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, null, amount, DUE, null, KHAN, lines, shared, "348")),
+                argumentSet("amount", "amount", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, "ALFHPKKA", null, DUE, null, KHAN, lines, shared, "348")),
+                argumentSet("date", "date", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, "ALFHPKKA", amount, null, null, KHAN, lines, shared, "348")),
+                argumentSet("beneficiary", "beneficiary", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, "ALFHPKKA", amount, DUE, null, null, lines, shared, "348")),
+                argumentSet("remittanceInfo", "remittanceInfo", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, "ALFHPKKA", amount, DUE, null, KHAN, null, shared, "348")),
+                argumentSet("charges", "charges", (Supplier<ForeignPayment>) () ->
+                        new ForeignPayment(PAYER, IBAN, "ALFHPKKA", amount, DUE, null, KHAN, lines, null, "348")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullComponents")
+    void should_reject_naming_the_component_when_created_given_null(String component, Supplier<ForeignPayment> create) {
+        assertThatNullPointerException().isThrownBy(create::get).withMessage(component);
+    }
 
     private static final Beneficiary AMIR = new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK");
     private static final String ACCOUNT_OF_34_CHARACTERS = "AB12" + "3".repeat(30);

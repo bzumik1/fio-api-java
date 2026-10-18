@@ -2,6 +2,7 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
+import javax.net.ssl.SSLHandshakeException;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -89,7 +90,8 @@ final class FioHttp {
         } catch (MalformedResponseException e) {
             throw new FioMalformedResponseException(
                     response.description() + " was answered with HTTP " + response.status()
-                            + " and a body this client does not understand: " + token.mask(e.getMessage()),
+                            + " and a body this client does not understand: "
+                            + token.maskExcerpt(MalformedResponseException.excerpt(e.getMessage(), FioException.RESPONSE_BODY_LIMIT)),
                     response.status(),
                     token.mask(response.text()),
                     TokenMaskedFailure.withoutToken(e, token));
@@ -146,7 +148,8 @@ final class FioHttp {
         return new FioTransportException(
                 describe(request) + " failed: " + token.mask(cause.toString()),
                 TokenMaskedFailure.withoutToken(cause, token),
-                !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException));
+                !(cause instanceof HttpConnectTimeoutException || cause instanceof ConnectException
+                        || cause instanceof SSLHandshakeException));
     }
 
     private FioException failure(FioResponse response) {

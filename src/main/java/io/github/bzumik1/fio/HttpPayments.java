@@ -33,8 +33,21 @@ final class HttpPayments implements FioClient.Payments {
     @Override
     public ImportResult submit(PaymentBatch batch) {
         requireNonNull(batch, "batch");
+        return submitted(batch, importFile(batch));
+    }
+
+    private byte[] importFile(PaymentBatch batch) {
+        byte[] xml = writer.write(batch.orders());
+        if (xml.length > PaymentFile.MAXIMUM_SIZE) {
+            throw new IllegalArgumentException("The batch written as XML is " + xml.length + " bytes, more than the "
+                    + PaymentFile.MAXIMUM_SIZE + " bytes the bank imports; submit it in smaller batches");
+        }
+        return xml;
+    }
+
+    private ImportResult submitted(PaymentBatch batch, byte[] xml) {
         List<Integer> fileOrder = PaymentImportWriter.fileOrder(batch.orders());
-        ImportResult result = upload(new PaymentFile(PaymentFileType.FIO_XML, writer.write(batch.orders())));
+        ImportResult result = upload(new PaymentFile(PaymentFileType.FIO_XML, xml));
         return new ImportResult(
                 result.errorCode(),
                 result.status(),
@@ -91,7 +104,11 @@ final class HttpPayments implements FioClient.Payments {
 
         @Override
         public FioClient.BatchRequest add(PaymentOrder order) {
-            orders.add(requireNonNull(order, "order"));
+            requireNonNull(order, "order");
+            if (submitted) {
+                throw new IllegalStateException("The batch was already submitted; build a new one to add orders");
+            }
+            orders.add(order);
             return this;
         }
 
@@ -103,8 +120,16 @@ final class HttpPayments implements FioClient.Payments {
             if (orders.isEmpty()) {
                 throw new IllegalStateException("The batch holds no payment order to submit");
             }
+            PaymentBatch batch;
+            byte[] xml;
+            try {
+                batch = new PaymentBatch(orders);
+                xml = importFile(batch);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException(e.getMessage(), e);
+            }
             submitted = true;
-            return HttpPayments.this.submit(new PaymentBatch(orders));
+            return submitted(batch, xml);
         }
 
         private <B> FioClient.BatchRequest built(

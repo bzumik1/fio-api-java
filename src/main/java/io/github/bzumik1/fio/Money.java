@@ -63,6 +63,8 @@ public record Money(BigDecimal amount, Currency currency) {
      *
      * @param amount the amount as a plain decimal such as {@code "100.00"} or {@code "-1250.5"}, with no exponent
      * @return the money
+     * @throws IllegalArgumentException when the amount is not a plain decimal, as {@link #of(String, String)}
+     *         describes
      */
     public static Money czk(String amount) {
         return of(amount, CZK.getCurrencyCode());
