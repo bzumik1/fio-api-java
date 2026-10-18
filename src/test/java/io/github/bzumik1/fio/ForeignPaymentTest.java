@@ -57,7 +57,6 @@ class ForeignPaymentTest {
         assertThatNullPointerException().isThrownBy(create::get).withMessage(component);
     }
 
-
     @Test
     void should_carry_every_part_when_built_given_full_order() {
         assertThat(PaymentSamples.fullForeign()).isEqualTo(new ForeignPayment(

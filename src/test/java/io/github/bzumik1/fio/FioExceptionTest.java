@@ -9,9 +9,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.params.provider.Arguments.argumentSet;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
 class FioExceptionTest {
 

@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
-import static io.github.bzumik1.fio.PaymentSamples.domesticInEuro;
 import static io.github.bzumik1.fio.PaymentSamples.domesticBuilder;
+import static io.github.bzumik1.fio.PaymentSamples.domesticInEuro;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
 import static io.github.bzumik1.fio.PaymentSamples.foreignBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
