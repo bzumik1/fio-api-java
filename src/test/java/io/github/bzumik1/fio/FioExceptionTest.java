@@ -81,6 +81,7 @@ class FioExceptionTest {
                 argumentSet("other status", new FioException("refused", 404, "Chyba"), false),
                 argumentSet("server error", new FioException("refused", 500, "Chyba"), false),
                 argumentSet("bad gateway", new FioException("refused", 502, "Bad Gateway"), true),
+                argumentSet("service unavailable", new FioException("refused", 503, "Service Unavailable"), false),
                 argumentSet("gateway timeout", new FioException("refused", 504, "Gateway Timeout"), true),
                 argumentSet("no answer", new FioException("no answer", new RuntimeException("boom")), false),
                 argumentSet("rate limit refused", new FioRateLimitException("refused", "wait", slot), false),

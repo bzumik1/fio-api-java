@@ -665,7 +665,7 @@ class HttpPaymentsTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"500, false", "502, true", "504, true"})
+    @CsvSource({"500, false", "502, true", "503, false", "504, true"})
     void should_say_whether_the_batch_may_have_been_accepted_when_submitted_given_server_or_gateway_error(
             int status, boolean mayHaveTakenEffect) {
         answer(status, "<html>Error</html>");
