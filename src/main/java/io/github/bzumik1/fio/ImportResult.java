@@ -14,7 +14,8 @@ import static java.util.Objects.requireNonNull;
  * @param errorCode 0 when the batch was accepted, 2 when accepted with warnings, else the code Fio's documentation
  *        lists
  * @param status whether the batch was accepted, accepted with warnings, or refused
- * @param batchId the id the bank gave the batch (číslo dávky), when it was accepted
+ * @param batchId the id the bank gave the batch (číslo dávky), when it was accepted; the first one, when the answer
+ *        names several, which Fio's documentation never describes
  * @param sums the sums of the orders, one for each currency of the batch
  * @param messages what the bank said about the batch and its orders, in the language chosen for the client
  */
