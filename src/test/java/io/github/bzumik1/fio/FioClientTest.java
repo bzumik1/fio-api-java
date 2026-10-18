@@ -607,8 +607,11 @@ class FioClientTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {500, 401, 403})
-    void should_raise_authorization_failure_when_downloading_given_status_the_api_uses_for_a_bad_token(int status) {
+    @CsvSource(delimiter = '|', value = {
+            "500|the bank failed or could not read the request",
+            "401|the account is not allowed",
+            "403|the account is not allowed"})
+    void should_raise_authorization_failure_when_downloading_given_status_the_api_uses_for_a_bad_token(int status, String reason) {
         server().respondWith(status, "<html>Internal Server Error</html>");
 
         FioAuthorizationException failure = catchThrowableOfType(FioAuthorizationException.class,
@@ -616,7 +619,8 @@ class FioClientTest {
 
         assertThat(failure.statusCode()).hasValue(status);
         assertThat(failure.responseBody()).hasValue("<html>Internal Server Error</html>");
-        assertThat(failure).hasMessageContaining("token").hasMessageNotContaining(SECRET);
+        assertThat(failure).hasMessageContaining("the bank refused the token").hasMessageContaining(reason)
+                .hasMessageNotContaining(SECRET);
     }
 
     @Test

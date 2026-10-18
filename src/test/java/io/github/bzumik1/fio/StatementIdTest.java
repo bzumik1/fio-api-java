@@ -32,9 +32,9 @@ class StatementIdTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"999, 1", "10000, 1", "2026, 0", "2026, -1"})
-    void should_reject_when_created_given_year_or_number_out_of_range(int year, int number) {
-        assertThatIllegalArgumentException().isThrownBy(() -> new StatementId(year, number));
+    @CsvSource({"999, 1, four digits", "10000, 1, four digits", "2026, 0, numbered from 1", "2026, -1, numbered from 1"})
+    void should_reject_when_created_given_year_or_number_out_of_range(int year, int number, String reason) {
+        assertThatIllegalArgumentException().isThrownBy(() -> new StatementId(year, number)).withMessageContaining(reason);
     }
 
     @ParameterizedTest
