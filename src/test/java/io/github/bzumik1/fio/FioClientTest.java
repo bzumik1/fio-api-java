@@ -498,6 +498,19 @@ class FioClientTest {
     }
 
     @Test
+    void should_read_an_answer_over_256_mib_when_downloading_given_maximum_response_size_raised_above_the_default() {
+        byte[] mebibyte = new byte[1024 * 1024];
+        List<byte[]> parts = new ArrayList<>(Collections.nCopies(256, mebibyte));
+        parts.add(new byte[1]);
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, parts);
+        FioClient raised = bank.builder().httpClient(http).maximumResponseSize(256 * 1024 * 1024 + 1).build();
+
+        Download pdf = raised.statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf).hasToString("Download[application/octet-stream, UTF-8, " + (256 * 1024 * 1024 + 1) + " bytes]");
+    }
+
+    @Test
     void should_sleep_on_the_thread_when_built_given_default_sleeper() {
         assertThat(FioClient.builder(TOKEN).sleeper()).isSameAs(Sleeper.THREAD);
     }

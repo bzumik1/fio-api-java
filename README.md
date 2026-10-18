@@ -201,7 +201,7 @@ FioClient fio = FioClient.builder(token)
 | `httpClient` | 10-second connect timeout | Your own `java.net.http.HttpClient`, for a proxy or a custom SSL context. |
 | `baseUri` | `https://fioapi.fio.cz/v1/rest` | Where the bank is; point it at a stub in tests. |
 | `clock` | the system clock | The clock the rate limiting and `FioRateLimitException.retryAfter()` use. |
-| `maximumResponseSize` | 256 MiB | The most bytes of one answer the client reads; a longer answer fails instead of filling the heap. |
+| `maximumResponseSize` | 256 MiB | The most bytes of one answer the client reads, higher or lower; a longer answer fails instead of filling the heap. |
 
 A `FioClient` is immutable and safe to share between threads; requests through one client are serialised by its
 rate limit. Build one client per token and share it, because two clients with the same token do not know about
@@ -235,8 +235,9 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
   failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
 - An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer the
-  bank documents, 50 000 movements as JSON with every field at its longest, is about 254 MiB; a client that only
-  downloads short periods can lower the size with the builder's `maximumResponseSize`.
+  bank documents, 50 000 movements as JSON with Czech text in every field at its longest, is about 254 MiB; text
+  with characters of three bytes or more in UTF-8 can make it longer. The builder's `maximumResponseSize` raises
+  the size for such answers, or lowers it for a client that only downloads short periods.
 
 ## Errors
 

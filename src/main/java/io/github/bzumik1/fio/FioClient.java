@@ -577,8 +577,10 @@ public interface FioClient {
 
         /**
          * Stops reading an answer that grows beyond a size, so that a misbehaving host cannot exhaust the heap.
-         * The default, 256 MiB, holds the largest answer the bank documents, 50 000 movements with every field
-         * at its longest; a client that only ever downloads short periods can go lower.
+         * The default, 256 MiB, holds the largest answer the bank documents, 50 000 movements with Czech text in
+         * every field at its longest, about 254 MiB; text with characters of three bytes or more in UTF-8 can
+         * make it longer, and a client that expects such answers can go higher, while one that only ever downloads
+         * short periods can go lower.
          *
          * @param bytes the most bytes of one answer the client reads, positive; an answer longer than that fails
          *        with a {@link FioResponseTooLargeException}
