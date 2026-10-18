@@ -19,6 +19,8 @@ import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -362,6 +364,51 @@ class FioClientTest {
         Download pdf = limited.statements().number(2026, 1).download(StatementFormat.PDF);
 
         assertThat(pdf.content()).hasSize(4096);
+    }
+
+    @Test
+    void should_raise_generic_failure_when_downloading_given_answer_one_byte_over_the_limit() {
+        FioClient limited = bank.builder().responseSizeLimit(4096).build();
+        server().respondWith(200, "application/pdf", new byte[4097]);
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 4096 bytes");
+    }
+
+    @Test
+    void should_raise_generic_failure_when_downloading_given_answer_over_the_limit_in_several_parts() {
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, List.of(new byte[600], new byte[600], new byte[600]));
+        FioClient limited = bank.builder().httpClient(http).responseSizeLimit(1024).build();
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 1024 bytes");
+    }
+
+    @Test
+    void should_read_answers_up_to_64_mib_when_downloading_given_default_builder() {
+        byte[] mebibyte = new byte[1024 * 1024];
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, Collections.nCopies(64, mebibyte));
+
+        Download pdf = bank.builder().httpClient(http).build().statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf.content()).hasSize(64 * 1024 * 1024);
+    }
+
+    @Test
+    void should_raise_generic_failure_when_downloading_given_default_builder_and_answer_over_64_mib() {
+        byte[] mebibyte = new byte[1024 * 1024];
+        List<byte[]> parts = new ArrayList<>(Collections.nCopies(64, mebibyte));
+        parts.add(new byte[1]);
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, parts);
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> bank.builder().httpClient(http).build().statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than " + 64 * 1024 * 1024 + " bytes");
     }
 
     @Test

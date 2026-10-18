@@ -24,6 +24,14 @@ class FioExceptionTest {
     }
 
     @Test
+    void should_keep_16_kib_of_body_when_created_given_public_limit() {
+        String body = "x".repeat(16 * 1024 + 1);
+
+        assertThat(FioException.RESPONSE_BODY_LIMIT).isEqualTo(16 * 1024);
+        assertThat(new FioException("refused", 400, body).responseBody()).hasValue("x".repeat(16 * 1024) + "…");
+    }
+
+    @Test
     void should_have_no_status_or_body_when_created_given_no_answer() {
         FioException failure = new FioException("no answer", new RuntimeException("boom"));
 
