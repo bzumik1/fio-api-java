@@ -94,9 +94,34 @@ class FioTokenTest {
     void should_mask_whole_tokens_and_each_cut_beginning_when_masking_excerpt_given_several_cut_marks() {
         FioToken token = FioToken.of(SECRET);
 
-        assertThat(token.maskExcerpt(SECRET + " '" + SECRET.substring(0, 1) + "\u2026' and '"
+        assertThat(token.maskExcerpt(SECRET + " '" + SECRET.substring(0, 12) + "\u2026' and '"
                 + SECRET.substring(0, SECRET.length() - 1) + "\u2026' rest"))
                 .isEqualTo("*** '***\u2026' and '***\u2026' rest");
+    }
+
+    @Test
+    void should_mask_the_beginning_of_the_token_when_masking_excerpt_given_token_cut_short_by_another_library() {
+        FioToken token = FioToken.of(SECRET);
+
+        assertThat(token.maskExcerpt("Text 'x" + SECRET.substring(0, SECRET.length() - 1) + "...' could not be parsed"))
+                .isEqualTo("Text 'x***...' could not be parsed");
+    }
+
+    @Test
+    void should_mask_every_beginning_of_the_token_when_masking_excerpt_given_beginnings_anywhere_in_the_text() {
+        FioToken token = FioToken.of(SECRET);
+
+        assertThat(token.maskExcerpt(SECRET.substring(0, 12) + " and " + SECRET.substring(0, 30) + SECRET.substring(0, 20)))
+                .isEqualTo("*** and ******");
+    }
+
+    @Test
+    void should_keep_short_beginnings_when_masking_excerpt_given_fewer_than_twelve_characters_of_the_token() {
+        FioToken token = FioToken.of(SECRET);
+        String text = "'" + SECRET.substring(0, 11) + "\u2026' and " + SECRET.charAt(0) + "\u2026";
+
+        assertThat(token.maskExcerpt(text)).isEqualTo(text);
+        assertThat(token.occursIn(text)).isFalse();
     }
 
     @ParameterizedTest

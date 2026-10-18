@@ -44,8 +44,8 @@ class FioHttpTest {
 
     @Test
     void should_mask_the_cut_beginning_of_the_token_when_parsing_fails_given_reason_cut_inside_the_token() {
-        FioMalformedResponseException failure = failureOf("y".repeat(FioException.RESPONSE_BODY_LIMIT - 10) + SECRET);
+        FioMalformedResponseException failure = failureOf("y".repeat(FioException.RESPONSE_BODY_LIMIT - 12) + SECRET);
 
-        assertThat(failure.getMessage()).endsWith("y***…").doesNotContain(SECRET.substring(0, 10));
+        assertThat(failure.getMessage()).endsWith("y***…").doesNotContain(SECRET.substring(0, 12));
     }
 }

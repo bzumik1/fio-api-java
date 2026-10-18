@@ -777,6 +777,20 @@ class FioClientTest {
     }
 
     @Test
+    void should_print_no_beginning_of_the_token_when_fetched_given_merchant_date_time_the_jdk_cuts_inside_the_token() {
+        String merchant = Fixtures.read(Fixtures.MERCHANT_DOCUMENTATION_EXAMPLE)
+                .replaceFirst("<transactionDateTime>[^<]*</transactionDateTime>",
+                        "<transactionDateTime>" + "x".repeat(20) + SECRET + "</transactionDateTime>");
+        server().respondWith(200, "application/xml", merchant.getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> client().merchant().between(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 16)).fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
+        assertThat(printed(failure)).contains("...").doesNotContain(SECRET.substring(0, 12));
+    }
+
+    @Test
     void should_permit_only_documented_failures_when_switched_over_given_sealed_hierarchy() {
         List<Class<?>> permitted = List.of(FioException.class.getPermittedSubclasses());
 
