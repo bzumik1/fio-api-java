@@ -58,7 +58,8 @@ requires io.github.bzumik1.fio;
 ```java
 FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_TOKEN")).build();
 
-AccountStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
+LocalDate today = LocalDate.now(ZoneId.of("Europe/Prague"));
+AccountStatement statement = fio.transactions().between(today.minusDays(30), today).fetch();
 for (Transaction transaction : statement.transactions()) {
     if (transaction.isIncoming()) {
         System.out.println(transaction.date() + " " + transaction.amount()
@@ -71,9 +72,10 @@ for (Transaction transaction : statement.transactions()) {
 ### Movements
 
 ```java
-AccountStatement january = fio.transactions().between(from, to).fetch();
+LocalDate today = LocalDate.now(ZoneId.of("Europe/Prague"));
+AccountStatement lastMonth = fio.transactions().between(today.minusDays(30), today).fetch();
 AccountStatement sinceLastTime = fio.transactions().sinceBookmark().fetch();
-Download csv = fio.transactions().between(from, to).download(TransactionFormat.CSV);
+Download csv = fio.transactions().between(today.minusDays(30), today).download(TransactionFormat.CSV);
 ```
 
 `between` downloads the movements dated within a period, both ends included. `sinceBookmark` downloads the
@@ -88,8 +90,11 @@ bank's answer as it came, in one of `TransactionFormat`'s six formats (CSV, GPC,
 FioClient.StatementRequest latest = fio.statements().latest();
 StatementId number = latest.statementId();
 AccountStatement statement = latest.fetch();
-Download pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
+Download pdf = latest.download(StatementFormat.PDF);
 ```
+
+`fio.statements().number(2026, 3)` chooses a statement by its number; one covering days more than 90 days back
+needs the full history unlocked, as described below.
 
 A statement comes typed from its JSON format or raw in any of `StatementFormat`'s ten formats, which add PDF,
 MT940 and the CBA and SBA XML formats to the six above. `latest()` asks the bank for the number once, on the
