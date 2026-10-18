@@ -3,12 +3,14 @@ package io.github.bzumik1.fio;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static io.github.bzumik1.fio.StubBank.SECRET;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class FioTokenTest {
 
@@ -25,10 +27,28 @@ class FioTokenTest {
     }
 
     @ParameterizedTest
-    @NullAndEmptySource
+    @EmptySource
     @ValueSource(strings = {"   ", "\n"})
     void should_reject_when_created_given_no_value(String value) {
         assertThatIllegalArgumentException().isThrownBy(() -> FioToken.of(value));
+    }
+
+    @Test
+    void should_reject_with_parameter_name_when_created_given_null() {
+        assertThatNullPointerException().isThrownBy(() -> FioToken.of(null)).withMessage("value");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"x", "abcdefghijklmno", " abcdefghijklmno "})
+    void should_reject_without_echoing_value_when_created_given_fewer_than_sixteen_characters(String value) {
+        assertThatIllegalArgumentException().isThrownBy(() -> FioToken.of(value))
+                .withMessageContaining("at least 16")
+                .withMessageNotContaining(value.strip().length() > 1 ? value.strip() : "'" + value.strip() + "'");
+    }
+
+    @Test
+    void should_accept_when_created_given_exactly_sixteen_characters() {
+        assertThat(FioToken.of("abcdefghijklmnop")).hasToString("FioToken[***]");
     }
 
     @ParameterizedTest

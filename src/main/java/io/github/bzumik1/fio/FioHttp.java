@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -20,15 +21,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import static io.github.bzumik1.fio.FioClient.MINIMUM_REQUEST_INTERVAL;
+import static java.util.Objects.requireNonNull;
 
 final class FioHttp {
 
     static final Set<String> MESSAGE_LANGUAGES = Set.of("cs", "sk", "en");
+    static final int RESPONSE_SIZE_LIMIT = 64 * 1024 * 1024;
 
     private final FioToken token;
     private final String baseUri;
@@ -37,9 +41,10 @@ final class FioHttp {
     private final Duration requestTimeout;
     private final RequestPacer pacer;
     private final Locale messageLocale;
+    private final int responseSizeLimit;
 
     FioHttp(FioToken token, URI baseUri, HttpClient httpClient, Clock clock, Duration requestTimeout,
-            RequestPacer pacer, Locale messageLocale) {
+            RequestPacer pacer, Locale messageLocale, int responseSizeLimit) {
         this.token = token;
         this.baseUri = baseUri.toString().replaceAll("/+$", "");
         this.httpClient = httpClient;
@@ -47,6 +52,7 @@ final class FioHttp {
         this.requestTimeout = requestTimeout;
         this.pacer = pacer;
         this.messageLocale = messageLocale;
+        this.responseSizeLimit = responseSizeLimit;
     }
 
     FioToken token() {
@@ -81,7 +87,7 @@ final class FioHttp {
         try {
             return parser.apply(response.body());
         } catch (MalformedResponseException e) {
-            throw new FioException(
+            throw new FioMalformedResponseException(
                     response.description() + " was answered with HTTP " + response.status()
                             + " and a body this client does not understand: " + token.mask(e.getMessage()),
                     response.status(),
@@ -126,13 +132,17 @@ final class FioHttp {
 
     private CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
         try {
-            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
+            return httpClient.sendAsync(request, info -> new BoundedBody(responseSizeLimit));
         } catch (RuntimeException e) {
             throw failed(request, e);
         }
     }
 
-    private FioTransportException failed(HttpRequest request, Throwable cause) {
+    private FioException failed(HttpRequest request, Throwable cause) {
+        if (cause instanceof ResponseTooLargeException) {
+            return new FioException(describe(request) + " was answered with more than " + responseSizeLimit
+                    + " bytes, which this client does not read", TokenMaskedFailure.withoutToken(cause, token));
+        }
         return new FioTransportException(
                 describe(request) + " failed: " + token.mask(cause.toString()),
                 TokenMaskedFailure.withoutToken(cause, token),
@@ -149,7 +159,8 @@ final class FioHttp {
                     body,
                     clock.instant().plus(MINIMUM_REQUEST_INTERVAL));
             case 401, 403, 500 -> new FioAuthorizationException(
-                    refused + ": the token does not exist, has expired or is not active",
+                    refused + ": the bank refused the token (it does not exist, has expired or is not active), or"
+                            + (status == 500 ? " the bank failed or could not read the request" : " the account is not allowed"),
                     status,
                     body);
             case 413 -> new FioTooManyTransactionsException(
@@ -188,6 +199,62 @@ final class FioHttp {
 
     private static byte[] utf8(String text) {
         return text.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static final class BoundedBody implements HttpResponse.BodySubscriber<byte[]> {
+
+        private final HttpResponse.BodySubscriber<byte[]> collector = HttpResponse.BodySubscribers.ofByteArray();
+        private final int limit;
+        private long received;
+        private Flow.@Nullable Subscription subscription;
+
+        private BoundedBody(int limit) {
+            this.limit = limit;
+        }
+
+        @Override
+        public CompletableFuture<byte[]> getBody() {
+            return collector.getBody().toCompletableFuture();
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            collector.onSubscribe(subscription);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> buffers) {
+            for (ByteBuffer buffer : buffers) {
+                received += buffer.remaining();
+            }
+            if (received > limit) {
+                requireNonNull(subscription, "subscription").cancel();
+                collector.onError(new ResponseTooLargeException(limit));
+                return;
+            }
+            collector.onNext(buffers);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            collector.onError(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            collector.onComplete();
+        }
+    }
+
+    static final class ResponseTooLargeException extends RuntimeException {
+
+        @java.io.Serial
+        private static final long serialVersionUID = 1L;
+
+        private ResponseTooLargeException(int limit) {
+            super("The answer is longer than " + limit + " bytes");
+        }
     }
 
     record FioResponse(String description, int status, @Nullable String mediaType, byte[] body) {

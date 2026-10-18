@@ -18,7 +18,8 @@ import static java.util.Objects.requireNonNull;
  *
  * @param from the payer's account
  * @param to the recipient's account, by IBAN
- * @param bic the BIC of the recipient's bank, optional within SEPA
+ * @param bic the BIC of the recipient's bank, optional within SEPA (Fio's schema types it as free text of up
+ *        to 50 characters; this library requires a BIC)
  * @param amount the amount, in euro
  * @param symbols the variable, constant and specific symbols
  * @param date the day the payment is due
@@ -119,12 +120,7 @@ public record EuroPayment(
             this.code = code;
         }
 
-        /**
-         * Returns the code Fio uses for the type.
-         *
-         * @return the code
-         */
-        public String code() {
+        String code() {
             return code;
         }
     }
@@ -145,7 +141,7 @@ public record EuroPayment(
         private @Nullable LocalDate date;
         private @Nullable String comment;
         private @Nullable Beneficiary beneficiary;
-        private final List<String> remittanceInfo = new ArrayList<>();
+        private List<String> remittanceInfo = List.of();
         private @Nullable String paymentReason;
         private Type type = Type.STANDARD;
 
@@ -285,7 +281,7 @@ public record EuroPayment(
         /**
          * Sets the holder of the recipient's account by name.
          *
-         * @param name the name, up to 35 characters
+         * @param name the name, up to 50 characters
          * @return this builder
          */
         public Builder beneficiary(String name) {
@@ -293,13 +289,13 @@ public record EuroPayment(
         }
 
         /**
-         * Adds a line of information for the recipient.
+         * Sets the lines of information for the recipient, replacing any set before.
          *
-         * @param line up to 35 characters; at most three lines
+         * @param lines up to three lines of up to 35 characters each
          * @return this builder
          */
-        public Builder remittanceInfo(String line) {
-            remittanceInfo.add(requireNonNull(line, "line"));
+        public Builder remittanceInfo(String... lines) {
+            remittanceInfo = List.of(requireNonNull(lines, "lines"));
             return this;
         }
 

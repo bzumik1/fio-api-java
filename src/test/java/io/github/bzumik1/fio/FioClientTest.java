@@ -2,6 +2,7 @@ package io.github.bzumik1.fio;
 
 import io.github.bzumik1.fio.StubFioServer.RecordedRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -9,6 +10,11 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URI;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.Future;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,6 +30,8 @@ import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.StubBank.TOKEN;
 import static io.github.bzumik1.fio.StubBank.printed;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -130,7 +138,7 @@ class FioClientTest {
     void should_ask_bank_for_statement_number_when_id_asked_given_latest_statement() {
         server().respondWith(200, "text/plain;charset=UTF-8", "2026,10".getBytes(StandardCharsets.UTF_8));
 
-        StatementId id = client().statements().latest().id();
+        StatementId id = client().statements().latest().statementId();
 
         assertThat(id).isEqualTo(new StatementId(2026, 10));
         assertThat(server().requests()).containsExactly(new RecordedRequest("GET", LAST_STATEMENT, "text/plain"));
@@ -157,7 +165,7 @@ class FioClientTest {
         server().route("transactions.pdf", 200, "application/pdf", "%PDF".getBytes(StandardCharsets.UTF_8));
         FioClient.StatementRequest latest = client().statements().latest();
 
-        latest.id();
+        latest.statementId();
         latest.fetch();
         latest.download(StatementFormat.PDF);
 
@@ -168,11 +176,48 @@ class FioClientTest {
     }
 
     @Test
+    void should_ask_bank_again_when_id_asked_given_first_lookup_failed() {
+        server().enqueue(500, "");
+        server().enqueue(200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
+        FioClient.StatementRequest latest = client().statements().latest();
+
+        assertThatThrownBy(latest::statementId).isInstanceOf(FioAuthorizationException.class);
+        assertThat(latest.statementId()).isEqualTo(new StatementId(2026, 10));
+
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(LAST_STATEMENT, LAST_STATEMENT);
+        assertThat(server().arrivals()).containsExactly(NOW, NOW.plusSeconds(30));
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void should_ask_bank_once_when_id_asked_concurrently_given_one_latest_request() throws Exception {
+        server().respondWith(200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
+        StubFioServer.Hold hold = server().holdNextRequest();
+        FioClient.StatementRequest latest = client().statements().latest();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<StatementId> first = pool.submit(latest::statementId);
+            hold.awaitArrival();
+            Future<StatementId> second = pool.submit(latest::statementId);
+            while (second.isDone() || pool instanceof ThreadPoolExecutor executor && executor.getActiveCount() < 2) {
+                Thread.onSpinWait();
+            }
+            hold.release();
+
+            assertThat(first.get()).isEqualTo(new StatementId(2026, 10));
+            assertThat(second.get()).isEqualTo(new StatementId(2026, 10));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(LAST_STATEMENT);
+    }
+
+    @Test
     void should_ask_bank_for_number_each_time_when_id_asked_given_latest_chosen_twice() {
         server().respondWith(200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
 
-        client().statements().latest().id();
-        client().statements().latest().id();
+        client().statements().latest().statementId();
+        client().statements().latest().statementId();
 
         assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(LAST_STATEMENT, LAST_STATEMENT);
     }
@@ -190,7 +235,7 @@ class FioClientTest {
 
     @Test
     void should_return_number_without_request_when_id_asked_given_statement_chosen_by_number() {
-        StatementId id = client().statements().number(new StatementId(2012, 1)).id();
+        StatementId id = client().statements().number(new StatementId(2012, 1)).statementId();
 
         assertThat(id).isEqualTo(new StatementId(2012, 1));
         assertThat(server().requests()).isEmpty();
@@ -211,19 +256,19 @@ class FioClientTest {
     void should_raise_generic_failure_when_latest_statement_requested_given_answer_that_is_not_a_number() {
         server().respondWith(200, "text/plain", "<html>Údržba</html>".getBytes(StandardCharsets.UTF_8));
 
-        FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().id());
+        FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().statementId());
 
-        assertThat(failure.getClass()).isEqualTo(FioException.class);
-        assertThat(failure).hasMessageContaining("Not a statement number");
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class)
+                .hasMessageContaining("Not a statement number");
     }
 
     @Test
     void should_raise_generic_failure_with_ok_status_when_latest_statement_requested_given_statement_number_zero() {
         server().respondWith(200, "text/plain", "2026,0".getBytes(StandardCharsets.UTF_8));
 
-        FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().id());
+        FioException failure = catchThrowableOfType(FioException.class, () -> client().statements().latest().statementId());
 
-        assertThat(failure.getClass()).isEqualTo(FioException.class);
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
         assertThat(failure.statusCode()).hasValue(200);
         assertThat(failure.responseBody()).hasValue("2026,0");
     }
@@ -260,6 +305,64 @@ class FioClientTest {
     void should_reject_without_request_when_bookmark_moved_given_negative_id() {
         assertThatIllegalArgumentException().isThrownBy(() -> client().bookmark().moveAfterTransaction(-1));
         assertThat(server().requests()).isEmpty();
+    }
+
+    @Test
+    void should_move_bookmark_to_the_start_when_bookmark_moved_given_id_zero() {
+        server().respondWith(200, "");
+
+        client().bookmark().moveAfterTransaction(0);
+
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly("/v1/rest/set-last-id/" + SECRET + "/0/");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"+10000-01-01", "0000-12-31", "-0005-01-01"})
+    void should_reject_without_request_when_period_or_day_chosen_given_year_outside_one_to_9999(String day) {
+        LocalDate outside = LocalDate.parse(day);
+        LocalDate inside = LocalDate.of(2026, 1, 1);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> client().transactions().between(outside, outside)).withMessageContaining("1 to 9999");
+        assertThatIllegalArgumentException().isThrownBy(() -> client().transactions().between(inside, outside)).withMessageContaining("1 to 9999");
+        assertThatIllegalArgumentException().isThrownBy(() -> client().merchant().between(outside, outside)).withMessageContaining("1 to 9999");
+        assertThatIllegalArgumentException().isThrownBy(() -> client().bookmark().moveToDate(outside)).withMessageContaining("1 to 9999");
+        assertThat(server().requests()).isEmpty();
+    }
+
+    @Test
+    void should_reject_with_parameter_name_when_bookmark_moved_given_null_day() {
+        assertThatNullPointerException().isThrownBy(() -> client().bookmark().moveToDate(null)).withMessage("date");
+    }
+
+    @Test
+    void should_raise_generic_failure_without_reading_when_downloading_given_answer_longer_than_the_limit() {
+        FioClient limited = bank.builder().responseSizeLimit(1024).build();
+        server().respondWith(200, "application/pdf", new byte[4096]);
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioException.class)
+                .hasMessageContaining("more than 1024 bytes")
+                .hasMessageNotContaining(SECRET);
+        assertThat(failure.statusCode()).isEmpty();
+        assertThat(failure.responseBody()).isEmpty();
+        assertThat(failure.getCause()).hasMessageContaining("longer than 1024 bytes");
+    }
+
+    @Test
+    void should_read_the_whole_answer_when_downloading_given_answer_exactly_at_the_limit() {
+        FioClient limited = bank.builder().responseSizeLimit(4096).build();
+        server().respondWith(200, "application/pdf", new byte[4096]);
+
+        Download pdf = limited.statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf.content()).hasSize(4096);
+    }
+
+    @Test
+    void should_sleep_on_the_thread_when_built_given_default_sleeper() {
+        assertThat(FioClient.builder(TOKEN).sleeper()).isSameAs(Sleeper.THREAD);
     }
 
     @ParameterizedTest
@@ -306,8 +409,10 @@ class FioClientTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"http://fioapi.fio.cz/v1/rest", "http://192.168.1.10/v1/rest", "http://localhost.example/v1", "http:/v1/rest"})
-    void should_reject_when_base_uri_set_given_plain_http_to_a_host_that_is_not_loopback(String uri) {
+    @ValueSource(strings = {
+            "http://fioapi.fio.cz/v1/rest", "http://192.168.1.10/v1/rest", "http://localhost.example/v1", "http://localhost:8089/v1",
+            "http://127.0.0.2/v1", "http://LOCALHOST/v1", "http://0.0.0.0/v1", "ftp://127.0.0.1/v1"})
+    void should_reject_when_base_uri_set_given_plain_http_to_a_host_that_is_not_a_loopback_address(String uri) {
         FioClient.Builder builder = FioClient.builder(TOKEN);
 
         assertThatIllegalArgumentException().isThrownBy(() -> builder.baseUri(URI.create(uri)))
@@ -315,7 +420,47 @@ class FioClientTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"http://localhost:8089/v1/rest", "http://127.0.0.1:8089/v1/rest", "http://[::1]:8089/v1/rest", "https://fio.example/api"})
+    @ValueSource(strings = {"https://fio_stub:8443/v1/rest", "https:///v1/rest", "http:/v1/rest", "https://fio.příklad.cz/v1"})
+    void should_reject_without_sending_when_base_uri_set_given_host_the_jdk_cannot_send_to(String uri) {
+        FioClient.Builder builder = FioClient.builder(TOKEN);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> builder.baseUri(URI.create(uri)))
+                .withMessageContaining("host");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://fio.example/v1?x=1", "https://fio.example/v1#rest", "https://user:pw@fio.example/v1", "https://fio.example/v1?"})
+    void should_reject_when_base_uri_set_given_user_info_query_or_fragment(String uri) {
+        FioClient.Builder builder = FioClient.builder(TOKEN);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> builder.baseUri(URI.create(uri)))
+                .withMessageContaining("user info, a query or a fragment");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://fio-stub:8089/v1/rest", "http://192.168.1.10/v1/rest", "http://localhost:8089/v1"})
+    void should_send_over_plain_http_when_base_uri_set_given_explicit_opt_in(String uri) {
+        RecordingHttpClient http = recording();
+        FioClient pointed = FioClient.builder(TOKEN).allowPlainHttp().baseUri(URI.create(uri)).httpClient(http).build();
+
+        pointed.bookmark().moveAfterTransaction(7);
+
+        assertThat(http.requests()).extracting(HttpRequest::uri)
+                .containsExactly(URI.create(uri + "/set-last-id/" + SECRET + "/7/"));
+    }
+
+    @Test
+    void should_reject_when_http_client_set_given_client_that_follows_redirects() {
+        FioClient.Builder builder = FioClient.builder(TOKEN);
+        HttpClient following = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
+
+        assertThatIllegalArgumentException().isThrownBy(() -> builder.httpClient(following))
+                .withMessageContaining("Redirect.NEVER");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://127.0.0.1:8089/v1/rest", "http://[::1]:8089/v1/rest", "https://fio.example/api"})
     void should_send_to_that_address_when_base_uri_set_given_https_or_loopback_uri(String uri) {
         RecordingHttpClient http = recording();
         FioClient pointed = FioClient.builder(TOKEN).baseUri(URI.create(uri)).httpClient(http).build();
@@ -479,7 +624,7 @@ class FioClientTest {
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client().transactions().sinceBookmark().fetch());
 
-        assertThat(failure.getClass()).isEqualTo(FioException.class);
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
         assertThat(failure.statusCode()).hasValue(200);
         assertThat(failure.responseBody()).hasValue("<html>Údržba ***</html>");
         assertThat(failure).hasMessageContaining("not valid JSON").hasMessageNotContaining(SECRET);
@@ -496,6 +641,7 @@ class FioClientTest {
                 FioAuthorizationException.class,
                 FioHistoryLockedException.class,
                 FioTooManyTransactionsException.class,
+                FioMalformedResponseException.class,
                 FioTransportException.class);
     }
 }

@@ -11,21 +11,24 @@ import java.time.LocalDate;
 public sealed interface PaymentOrder permits DomesticPayment, EuroPayment, ForeignPayment {
 
     /**
-     * Returns the account the payment leaves; its currency is the currency of the order.
+     * Returns the Fio account the order is submitted for: the one the money leaves, or, for a
+     * {@link DomesticPayment.Type#DIRECT_DEBIT direct debit}, the one it is collected to. Its currency is the
+     * currency of the order.
      *
-     * @return the payer's account
+     * @return the account of the account holder submitting the order
      */
     DomesticAccount from();
 
     /**
-     * Returns the recipient's account.
+     * Returns the counterparty's account: the one the money goes to, or, for a
+     * {@link DomesticPayment.Type#DIRECT_DEBIT direct debit}, the one it is collected from.
      *
-     * @return the account the payment goes to
+     * @return the counterparty's account
      */
     BankAccount to();
 
     /**
-     * Returns the amount; its currency has to be the currency of the payer's account.
+     * Returns the amount; its currency has to be the currency of the {@link #from() account holder's account}.
      *
      * @return the amount
      */

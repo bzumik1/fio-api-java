@@ -1,6 +1,7 @@
 package io.github.bzumik1.fio;
 
 import io.github.bzumik1.fio.StubFioServer.Hold;
+import io.github.bzumik1.fio.StubFioServer.RecordedRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -296,7 +297,71 @@ class RequestPacingTest {
 
     @Test
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void should_fail_without_sending_when_queued_behind_two_callers_given_time_waiting_for_the_lock_counts() throws Exception {
+    void should_fail_without_sending_when_waiting_for_the_lock_outlasts_the_maximum_wait_given_held_request() throws Exception {
+        FioClient brief = clientWaitingUpTo(Duration.ofMillis(200));
+        server().respondWith(200, "");
+        Hold hold = server().holdNextRequest();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> first = pool.submit(() -> brief.bookmark().moveAfterTransaction(1));
+            hold.awaitArrival();
+            long before = System.nanoTime();
+
+            FioRateLimitException refused = catchThrowableOfType(
+                    FioRateLimitException.class, () -> brief.bookmark().moveAfterTransaction(2));
+
+            assertThat(Duration.ofNanos(System.nanoTime() - before)).isGreaterThanOrEqualTo(Duration.ofMillis(200));
+            assertThat(refused).hasMessageContaining("still in progress");
+            assertThat(refused.statusCode()).isEmpty();
+            assertThat(refused.retryAfter()).isEqualTo(NOW.plusSeconds(30));
+            hold.release();
+            first.get();
+            assertThat(server().arrivals()).containsExactly(NOW);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void should_serve_callers_in_arrival_order_when_queued_given_fair_lock() throws Exception {
+        FioClient shared = clientWaitingUpTo(Duration.ofMinutes(5));
+        server().respondWithPath("application/pdf");
+        Hold hold = server().holdNextRequest();
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        List<Thread> queued = new CopyOnWriteArrayList<>();
+        List<Future<String>> results = new ArrayList<>();
+        try {
+            Future<String> first = pool.submit(() -> shared.statements().number(2026, 1).download(StatementFormat.PDF).asText());
+            hold.awaitArrival();
+            for (int number = 2; number <= 4; number++) {
+                int statement = number;
+                results.add(pool.submit(() -> {
+                    queued.add(Thread.currentThread());
+                    return shared.statements().number(2026, statement).download(StatementFormat.PDF).asText();
+                }));
+                awaitWaitingForLock(queued, results);
+            }
+
+            hold.release();
+            first.get();
+            for (Future<String> result : results) {
+                result.get();
+            }
+
+            assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(
+                    "/v1/rest/by-id/" + SECRET + "/2026/1/transactions.pdf",
+                    "/v1/rest/by-id/" + SECRET + "/2026/2/transactions.pdf",
+                    "/v1/rest/by-id/" + SECRET + "/2026/3/transactions.pdf",
+                    "/v1/rest/by-id/" + SECRET + "/2026/4/transactions.pdf");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void should_fail_the_last_caller_without_sending_when_queued_behind_two_callers_given_the_slots_outlast_the_maximum_wait() throws Exception {
         FioClient patient = clientWaitingUpTo(Duration.ofSeconds(45));
         server().respondWith(200, "");
         Hold hold = server().holdNextRequest();
@@ -322,8 +387,8 @@ class RequestPacingTest {
             first.get();
             List<Optional<FioRateLimitException>> outcomes = List.of(second.get(), third.get());
 
-            assertThat(outcomes).filteredOn(Optional::isEmpty).hasSize(1);
-            FioRateLimitException refused = outcomes.stream().flatMap(Optional::stream).findFirst().orElseThrow();
+            assertThat(outcomes.get(0)).isEmpty();
+            FioRateLimitException refused = outcomes.get(1).orElseThrow();
             assertThat(refused.statusCode()).isEmpty();
             assertThat(refused.retryAfter()).isEqualTo(NOW.plusSeconds(60));
             assertThat(server().arrivals()).containsExactly(NOW, NOW.plusSeconds(30));
@@ -334,8 +399,12 @@ class RequestPacingTest {
 
     private static void awaitWaitingForLock(List<Thread> threads, List<? extends Future<?>> calls) {
         while (calls.stream().noneMatch(Future::isDone)
-                && (threads.size() < calls.size() || threads.stream().anyMatch(thread -> thread.getState() != Thread.State.TIMED_WAITING))) {
+                && (threads.size() < calls.size() || threads.stream().anyMatch(thread -> !isWaiting(thread)))) {
             Thread.onSpinWait();
         }
+    }
+
+    private static boolean isWaiting(Thread thread) {
+        return thread.getState() == Thread.State.WAITING || thread.getState() == Thread.State.TIMED_WAITING;
     }
 }

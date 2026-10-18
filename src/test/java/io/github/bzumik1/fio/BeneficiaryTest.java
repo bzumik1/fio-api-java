@@ -44,18 +44,18 @@ class BeneficiaryTest {
     }
 
     @Test
-    void should_keep_name_when_created_given_name_of_35_characters() {
-        assertThat(Beneficiary.named("x".repeat(35)).name()).hasSize(35);
+    void should_keep_name_when_created_given_name_of_50_characters() {
+        assertThat(Beneficiary.named("x".repeat(50)).name()).hasSize(50);
     }
 
     @ParameterizedTest
     @CsvSource(value = {
-            "name   | The beneficiary's name is at most 35 characters, not 36",
-            "street | The beneficiary's street is at most 35 characters, not 36",
-            "city   | The beneficiary's city is at most 35 characters, not 36"
+            "name   | The beneficiary's name is at most 50 characters, not 51",
+            "street | The beneficiary's street is at most 50 characters, not 51",
+            "city   | The beneficiary's city is at most 50 characters, not 51"
     }, delimiter = '|')
-    void should_reject_naming_the_part_when_created_given_part_longer_than_35_characters(String part, String message) {
-        String tooLong = "x".repeat(36);
+    void should_reject_naming_the_part_when_created_given_part_longer_than_50_characters(String part, String message) {
+        String tooLong = "x".repeat(51);
 
         assertThatIllegalArgumentException().isThrownBy(() -> new Beneficiary(
                         part.equals("name") ? tooLong : "Amir",

@@ -2,6 +2,8 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Where a card was issued relative to the merchant's bank, as the bank classifies a card transaction. Constants
  * may be added in a minor release, so a {@code switch} over this type needs a {@code default} branch.
@@ -27,7 +29,7 @@ public enum CardTransactionType {
      * @return the type, or {@link #OTHER} for an unknown text
      */
     public static CardTransactionType fromLabel(String label) {
-        String stripped = label.strip();
+        String stripped = requireNonNull(label, "label").strip();
         for (CardTransactionType type : values()) {
             if (type != OTHER && type.name().equals(stripped)) {
                 return type;

@@ -34,7 +34,7 @@ FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_TOKEN")).build()
 
 AccountStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
 for (Transaction transaction : statement.transactions()) {
-    if (transaction.amount().isPositive()) {
+    if (transaction.isIncoming()) {
         System.out.println(transaction.date() + " " + transaction.amount()
                 + " VS " + transaction.symbols().variable()
                 + " from " + transaction.counterparty().name());
@@ -59,13 +59,16 @@ bank's answer as it came, in one of `TransactionFormat`'s six formats (CSV, GPC,
 ### Official statements
 
 ```java
-StatementId latest = fio.statements().latest().id();
-AccountStatement statement = fio.statements().latest().fetch();
+FioClient.StatementRequest latest = fio.statements().latest();
+StatementId number = latest.statementId();
+AccountStatement statement = latest.fetch();
 Download pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
 ```
 
 A statement comes typed from its JSON format or raw in any of `StatementFormat`'s ten formats, which add PDF,
-MT940 and the CBA and SBA XML formats to the six above.
+MT940 and the CBA and SBA XML formats to the six above. `latest()` asks the bank for the number once, on the
+first call that needs it, and keeps it on the request, so hold on to the request rather than calling `latest()`
+again; every call to the bank is 30 seconds apart.
 
 ### The bookmark
 
@@ -171,23 +174,28 @@ reads it from an environment variable.
   answers HTTP 422, which becomes `FioHistoryLockedException`.
 - **50 000 movements per download.** A larger answer is refused with HTTP 413, which becomes
   `FioTooManyTransactionsException`; ask for a shorter period or move the bookmark forward.
-- A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`.
+- A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
+  failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
+- An answer longer than 64 MiB is not read and fails with a plain `FioException`; the largest answer the bank
+  sends, 50 000 movements as JSON, is well under that.
 
 ## Errors
 
-Every failure is a `FioException`, an unchecked exception with the HTTP status and the bank's response body
-(token masked). The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
-`FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException`,
-`FioTooManyTransactionsException`, `FioTransportException` (no answer: connection, timeout, interruption; its
-`mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for everything
-else, including an answer the client does not understand.
+Every failure is a `FioException`, an unchecked exception with the HTTP status and the first 16 KiB of the
+bank's response body (token masked). The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and
+newer: `FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException` (its
+`earliestAvailableDay()` reads the day the bank's answer names, when it names one),
+`FioTooManyTransactionsException`, `FioMalformedResponseException` (a success status with a body the client does
+not understand; retrying will not help), `FioTransportException` (no answer: connection, timeout, interruption;
+its `mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any
+other status.
 
 ## Compatibility
 
-The public API is what `module-info.java` exports, under semantic versioning, with two things to know: the
-interfaces nested in `FioClient` may gain methods in a minor release, so implement them outside this library (as a
-test fake, say) only at your own risk; and the enums `TransactionType`, `CardTransactionType` and the format enums
+The public API is what `module-info.java` exports, under semantic versioning, with two things to know:
+`FioClient` and the interfaces nested in it may gain methods in a minor release, so implement them outside this
+library (as a test fake, say) only at your own risk; and the enums `TransactionType`, `CardTransactionType` and the format enums
 may gain constants, so a `switch` over them needs a `default`. The records that carry bank data (`Transaction`,
 `AccountInfo`, `CardTransaction`, `ImportResult`) may gain components in a minor release when Fio adds a field;
 their accessors stay, but code that calls their canonical constructor or deconstructs them with a record pattern
@@ -197,6 +205,10 @@ Bad input fails before anything is sent: a malformed value (an account number th
 symbol that is not digits, a period that ends before it starts) is an `IllegalArgumentException` that names the
 problem, a payment builder with a required part missing is an `IllegalStateException`, and a `null` argument is a
 `NullPointerException`.
+
+The client refuses a base URI other than `https`, because the token travels in the request path; plain `http` is
+accepted for the loopback addresses `127.0.0.1` and `[::1]`, where test stubs live, or anywhere after the
+builder's `allowPlainHttp()`. A custom `HttpClient` has to keep the JDK's default of not following redirects.
 
 ## The model
 

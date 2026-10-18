@@ -5,8 +5,10 @@ import org.jspecify.annotations.Nullable;
 import java.io.Serial;
 
 /**
- * The token does not exist, has expired or is not active yet. Fio's documentation names HTTP 500 for this; the
- * client treats 401 and 403 the same way.
+ * The bank refused the token: it does not exist, has expired or is not active yet. Fio's documentation names HTTP
+ * 500 for this, and the client treats 401 and 403 the same way. As 500 is also what a server error or, for a
+ * payment import, a request the bank could not read gets, check that the bank is up before replacing a token
+ * that worked a moment ago.
  */
 public final class FioAuthorizationException extends FioException {
 

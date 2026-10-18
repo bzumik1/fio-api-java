@@ -139,7 +139,7 @@ class HttpMerchantTest {
 
         FioException failure = catchThrowableOfType(FioException.class, () -> client.merchant().between(FROM, TO).fetch());
 
-        assertThat(failure.getClass()).isEqualTo(FioException.class);
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
         assertThat(failure.statusCode()).hasValue(200);
         assertThat(failure).hasMessageContaining("The root element is html, not MerchantStatement")
                 .hasMessageNotContaining(SECRET);
@@ -154,8 +154,8 @@ class HttpMerchantTest {
         FioException failure = catchThrowableOfType(FioException.class, () -> client.merchant().between(FROM, TO).fetch());
 
         assertThat(failure).isExactlyInstanceOf(FioAuthorizationException.class)
-                .hasMessage("Fio API request GET " + server.baseUri() + "/merchant/***/2012-07-01/2012-07-31/transactions.xml"
-                        + " was refused with HTTP 500: the token does not exist, has expired or is not active");
+                .hasMessageContaining("GET " + server.baseUri() + "/merchant/***/2012-07-01/2012-07-31/transactions.xml")
+                .hasMessageContaining("refused with HTTP 500");
         assertThat(failure.statusCode()).hasValue(500);
     }
 

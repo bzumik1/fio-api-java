@@ -9,12 +9,14 @@ import static io.github.bzumik1.fio.PaymentText.required;
 /**
  * The holder of the account a payment abroad goes to.
  *
- * @param name the name, up to 35 characters
- * @param street the street of the address, up to 35 characters
- * @param city the city of the address, up to 35 characters
+ * @param name the name, up to 50 characters (the limit of Fio's import schema; the documentation says 35)
+ * @param street the street of the address, up to 50 characters
+ * @param city the city of the address, up to 50 characters
  * @param country the two-letter country code, such as {@code AT}, from the list of Fio's import schema
  */
 public record Beneficiary(String name, @Nullable String street, @Nullable String city, @Nullable String country) {
+
+    private static final int SCHEMA_LIMIT = 50;
 
     /**
      * Validates the components.
@@ -27,9 +29,9 @@ public record Beneficiary(String name, @Nullable String street, @Nullable String
      *         country is not a code of Fio's list
      */
     public Beneficiary {
-        name = required(name, 35, "beneficiary's name");
-        street = optional(street, 35, "beneficiary's street");
-        city = optional(city, 35, "beneficiary's city");
+        name = required(name, SCHEMA_LIMIT, "beneficiary's name");
+        street = optional(street, SCHEMA_LIMIT, "beneficiary's street");
+        city = optional(city, SCHEMA_LIMIT, "beneficiary's city");
         country = country == null ? null : countryCode(country);
     }
 

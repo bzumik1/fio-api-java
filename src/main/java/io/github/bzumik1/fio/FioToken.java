@@ -5,6 +5,8 @@ import org.jspecify.annotations.Nullable;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * The API token of one account, created in Fio internet banking (Nastavení, API). It becomes usable five minutes
  * after it is authorised and lives at most 180 days unless renewed; a "Sledování účtu" (account watching) token is
@@ -16,6 +18,7 @@ import java.util.regex.Pattern;
 public final class FioToken {
 
     private static final Pattern URL_PATH_SAFE = Pattern.compile("[A-Za-z0-9_-]+");
+    private static final int MINIMUM_LENGTH = 16;
     private static final String MASK = "***";
 
     private final String value;
@@ -29,16 +32,19 @@ public final class FioToken {
      *
      * @param value the token
      * @return the token
-     * @throws IllegalArgumentException when the value is blank or holds characters a URL path cannot carry; the
-     *         message never repeats the value
+     * @throws IllegalArgumentException when the value is blank, shorter than 16 characters (Fio issues 64) or
+     *         holds characters a URL path cannot carry; the message never repeats the value
      */
     public static FioToken of(String value) {
-        if (value == null || value.isBlank()) {
+        String stripped = requireNonNull(value, "value").strip();
+        if (stripped.isEmpty()) {
             throw new IllegalArgumentException("A Fio API token is required");
         }
-        String stripped = value.strip();
         if (!URL_PATH_SAFE.matcher(stripped).matches()) {
             throw new IllegalArgumentException("A Fio API token may contain only letters, digits, '-' and '_'");
+        }
+        if (stripped.length() < MINIMUM_LENGTH) {
+            throw new IllegalArgumentException("A Fio API token has at least " + MINIMUM_LENGTH + " characters");
         }
         return new FioToken(stripped);
     }

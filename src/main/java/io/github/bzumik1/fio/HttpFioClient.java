@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -13,6 +14,8 @@ final class HttpFioClient implements FioClient {
 
     private static final String JSON = "application/json";
     private static final String TRANSACTIONS = "transactions.";
+    private static final int FIRST_YEAR = 1;
+    private static final int LAST_YEAR = 9999;
 
     private final FioHttp http;
     private final AccountStatementParser statementParser = new AccountStatementParser();
@@ -59,11 +62,19 @@ final class HttpFioClient implements FioClient {
     }
 
     static void requirePeriod(LocalDate from, LocalDate to) {
-        requireNonNull(from, "from");
-        requireNonNull(to, "to");
+        requireDay(from, "from");
+        requireDay(to, "to");
         if (to.isBefore(from)) {
             throw new IllegalArgumentException("The period ends on " + to + ", before it starts on " + from);
         }
+    }
+
+    static LocalDate requireDay(LocalDate date, String name) {
+        requireNonNull(date, name);
+        if (date.getYear() < FIRST_YEAR || date.getYear() > LAST_YEAR) {
+            throw new IllegalArgumentException("A day in the years " + FIRST_YEAR + " to " + LAST_YEAR + " is required, not " + date);
+        }
+        return date;
     }
 
     static String iso(LocalDate date) {
@@ -130,29 +141,41 @@ final class HttpFioClient implements FioClient {
     private final class HttpStatementRequest implements StatementRequest {
 
         private final Supplier<StatementId> lookup;
-        private @Nullable StatementId resolved;
+        private final ReentrantLock resolving = new ReentrantLock();
+        private volatile @Nullable StatementId resolved;
 
         private HttpStatementRequest(Supplier<StatementId> lookup) {
             this.lookup = lookup;
         }
 
         @Override
-        public synchronized StatementId id() {
-            if (resolved == null) {
-                resolved = lookup.get();
+        public StatementId statementId() {
+            StatementId known = resolved;
+            if (known != null) {
+                return known;
             }
-            return resolved;
+            resolving.lock();
+            try {
+                known = resolved;
+                if (known == null) {
+                    known = lookup.get();
+                    resolved = known;
+                }
+                return known;
+            } finally {
+                resolving.unlock();
+            }
         }
 
         @Override
         public AccountStatement fetch() {
-            return http.parsed(http.get(JSON, path(id(), TRANSACTIONS + "json")), statementParser::parse);
+            return http.parsed(http.get(JSON, path(statementId(), TRANSACTIONS + "json")), statementParser::parse);
         }
 
         @Override
         public Download download(StatementFormat format) {
             requireNonNull(format, "format");
-            return http.get(format.mediaType(), path(id(), TRANSACTIONS + format.extension())).document(format.charset());
+            return http.get(format.mediaType(), path(statementId(), TRANSACTIONS + format.extension())).document(format.charset());
         }
 
         private String[] path(StatementId statement, String last) {
@@ -174,8 +197,7 @@ final class HttpFioClient implements FioClient {
 
         @Override
         public void moveToDate(LocalDate date) {
-            requireNonNull(date, "date");
-            http.get("*/*", "set-last-date", http.token().value(), iso(date), "");
+            http.get("*/*", "set-last-date", http.token().value(), iso(requireDay(date, "date")), "");
         }
     }
 }

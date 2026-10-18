@@ -121,8 +121,7 @@ class ForeignPaymentTest {
     @Test
     void should_reject_when_built_given_fifth_remittance_line() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> foreignBuilder().remittanceInfo("2").remittanceInfo("3").remittanceInfo("4")
-                        .remittanceInfo("5").build())
+                .isThrownBy(() -> foreignBuilder().remittanceInfo("1", "2", "3", "4", "5").build())
                 .withMessage("At most 4 remittance lines are allowed, not 5");
     }
 

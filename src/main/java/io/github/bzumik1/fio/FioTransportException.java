@@ -11,6 +11,9 @@ import java.io.Serial;
  * <p>{@link #mayHaveReachedTheBank()} tells whether the request may have gone out before the failure. When it may
  * have, the bank may have acted on it: a payment batch may be waiting for authorisation, or the bookmark may have
  * moved. Such a request is not to be repeated blindly; check in Fio internet banking first.
+ *
+ * <p>The cause is the JDK's exception when its text is free of the token; when the token appears anywhere in the
+ * cause chain, the chain is replaced by copies that keep the masked messages but not the classes.
  */
 public final class FioTransportException extends FioException {
 

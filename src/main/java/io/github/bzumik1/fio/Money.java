@@ -20,16 +20,21 @@ public record Money(BigDecimal amount, Currency currency) {
 
     private static final Currency CZK = Currency.getInstance("CZK");
     private static final Pattern PLAIN_DECIMAL = Pattern.compile("-?\\d{1,40}(\\.\\d{1,10})?");
+    private static final int MAXIMUM_SCALE = 1000;
 
     /**
      * Validates the components.
      *
-     * @param amount the amount
+     * @param amount the amount, with a scale within {@code \u00b11000} so that it can always be printed plainly
      * @param currency the currency
+     * @throws IllegalArgumentException when the scale is outside that range
      */
     public Money {
         requireNonNull(amount, "amount");
         requireNonNull(currency, "currency");
+        if (Math.abs(amount.scale()) > MAXIMUM_SCALE) {
+            throw new IllegalArgumentException("An amount has a scale within \u00b1" + MAXIMUM_SCALE + ", not " + amount);
+        }
     }
 
     /**

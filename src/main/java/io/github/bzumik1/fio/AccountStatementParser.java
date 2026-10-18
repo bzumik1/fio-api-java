@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -99,17 +100,18 @@ final class AccountStatementParser {
             throw new MalformedResponseException("transactionList.transaction is not an array");
         }
         List<Transaction> parsed = new ArrayList<>();
+        Map<String, String> names = new HashMap<>();
         for (JsonNode transaction : transactions) {
-            parsed.add(transaction(transaction));
+            parsed.add(transaction(transaction, names));
         }
         return parsed;
     }
 
-    private Transaction transaction(JsonNode transaction) {
+    private Transaction transaction(JsonNode transaction, Map<String, String> names) {
         if (!transaction.isObject()) {
             throw new MalformedResponseException("A transaction is not an object");
         }
-        Map<Integer, TransactionColumn> columns = columns(transaction);
+        Map<Integer, TransactionColumn> columns = columns(transaction, names);
         Function<Column, RawValue> column = known -> known.valueIn(columns);
         String typeLabel = column.apply(Column.TYPE).requiredText();
         return new Transaction(
@@ -161,20 +163,20 @@ final class AccountStatementParser {
         }
     }
 
-    private static Map<Integer, TransactionColumn> columns(JsonNode transaction) {
+    private static Map<Integer, TransactionColumn> columns(JsonNode transaction, Map<String, String> names) {
         Map<Integer, TransactionColumn> columns = new TreeMap<>();
         for (Map.Entry<String, JsonNode> property : transaction.properties()) {
             JsonNode column = property.getValue();
             Integer id = column.isObject() ? columnId(property.getKey(), column) : null;
             if (id != null) {
-                columns.put(id, new TransactionColumn(id, interned(textOf(column.get("name"))), textOf(column.get("value"))));
+                columns.put(id, new TransactionColumn(id, shared(textOf(column.get("name")), names), textOf(column.get("value"))));
             }
         }
         return columns;
     }
 
-    private static @Nullable String interned(@Nullable String name) {
-        return name == null ? null : name.intern();
+    private static @Nullable String shared(@Nullable String name, Map<String, String> names) {
+        return name == null ? null : names.computeIfAbsent(name, Function.identity());
     }
 
     private static @Nullable Integer columnId(String key, JsonNode column) {

@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
@@ -101,9 +102,10 @@ public interface FioClient {
         /**
          * Chooses the movements dated within a period, both ends included. Nothing changes on the bank's side.
          *
-         * @param from the first day of the period
+         * @param from the first day of the period, in the years 1 to 9999
          * @param to the last day of the period, not before {@code from}
          * @return the chosen download
+         * @throws IllegalArgumentException when the period ends before it starts or a day is outside those years
          */
         TransactionRequest between(LocalDate from, LocalDate to);
 
@@ -154,8 +156,10 @@ public interface FioClient {
     interface Statements {
 
         /**
-         * Chooses the most recently created official statement. Its number is asked from the bank when the
-         * download is fetched, so a fetch or download costs two requests, 30 seconds apart.
+         * Chooses the most recently created official statement. Its number is asked from the bank by the first
+         * of {@link StatementRequest#statementId()}, {@link StatementRequest#fetch()} and
+         * {@link StatementRequest#download(StatementFormat)} called on the returned request and kept there, so a
+         * fetch or download costs two requests, 30 seconds apart, and keeping the request saves asking again.
          *
          * @return the chosen download
          */
@@ -187,12 +191,13 @@ public interface FioClient {
     interface StatementRequest {
 
         /**
-         * Returns the year and number of the statement; for {@link Statements#latest()} this asks the bank.
+         * Returns the year and number of the statement; for {@link Statements#latest()} this asks the bank once
+         * and keeps the answer.
          *
          * @return the statement number
          * @throws FioException when the bank refuses or does not answer the request
          */
-        StatementId id();
+        StatementId statementId();
 
         /**
          * Downloads the statement as typed records (the JSON format).
@@ -220,9 +225,10 @@ public interface FioClient {
         /**
          * Chooses the card transactions dated within a period, both ends included.
          *
-         * @param from the first day of the period
+         * @param from the first day of the period, in the years 1 to 9999
          * @param to the last day of the period, not before {@code from}
          * @return the chosen download
+         * @throws IllegalArgumentException when the period ends before it starts or a day is outside those years
          */
         MerchantRequest between(LocalDate from, LocalDate to);
     }
@@ -259,8 +265,9 @@ public interface FioClient {
          * Moves the bookmark behind a movement, so the next {@link Transactions#sinceBookmark()} starts with the
          * movement after it.
          *
-         * @param transactionId the id of the last movement that was downloaded successfully
+         * @param transactionId the id of the last movement that was downloaded successfully, not negative
          * @throws FioException when the bank refuses or does not answer the request
+         * @throws IllegalArgumentException when the id is negative
          */
         void moveAfterTransaction(long transactionId);
 
@@ -268,8 +275,9 @@ public interface FioClient {
          * Moves the bookmark to a day, so the next {@link Transactions#sinceBookmark()} starts with that day's
          * movements.
          *
-         * @param date the first day that was not downloaded successfully
+         * @param date the first day that was not downloaded successfully, in the years 1 to 9999
          * @throws FioException when the bank refuses or does not answer the request
+         * @throws IllegalArgumentException when the day is outside those years
          */
         void moveToDate(LocalDate date);
     }
@@ -325,6 +333,10 @@ public interface FioClient {
          *
          * @param order fills in the payment
          * @return this batch
+         * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
+         *         already submitted
+         * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
+         *         {@link DomesticPayment.Builder#build()} describes
          */
         BatchRequest domestic(Consumer<DomesticPayment.Builder> order);
 
@@ -333,6 +345,10 @@ public interface FioClient {
          *
          * @param order fills in the payment
          * @return this batch
+         * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
+         *         already submitted
+         * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
+         *         {@link EuroPayment.Builder#build()} describes
          */
         BatchRequest euro(Consumer<EuroPayment.Builder> order);
 
@@ -341,6 +357,10 @@ public interface FioClient {
          *
          * @param order fills in the payment
          * @return this batch
+         * @throws IllegalStateException when the filled-in payment misses a required part, or the batch was
+         *         already submitted
+         * @throws IllegalArgumentException when a part of the filled-in payment is invalid, as
+         *         {@link ForeignPayment.Builder#build()} describes
          */
         BatchRequest foreign(Consumer<ForeignPayment.Builder> order);
 
@@ -349,6 +369,7 @@ public interface FioClient {
          *
          * @param order the order
          * @return this batch
+         * @throws IllegalStateException when the batch was already submitted
          */
         BatchRequest add(PaymentOrder order);
 
@@ -361,44 +382,66 @@ public interface FioClient {
          *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
          *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
          *         before submitting again
-         * @throws IllegalStateException when the batch is empty or was already submitted
+         * @throws IllegalStateException when the batch is empty or was already submitted; a {@link PaymentBatch}
+         *         built by hand refuses to be empty with an {@link IllegalArgumentException} instead, as there
+         *         it is an argument
          */
         ImportResult submit();
     }
 
     /**
      * Builds a {@link FioClient}. Every setting has a production default.
+     *
+     * <p>The default HTTP client is created by {@link #build()} and lives with the {@link FioClient}; its threads
+     * end when the client is no longer referenced. To close it earlier, or to share it, pass one through
+     * {@link #httpClient(HttpClient)} and manage it yourself.
      */
     final class Builder {
 
         private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
         private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofMinutes(2);
+        private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "[::1]");
 
         private final FioToken token;
         private URI baseUri = DEFAULT_BASE_URI;
+        private boolean plainHttpAllowed;
         private @Nullable HttpClient httpClient;
         private Clock clock = Clock.systemUTC();
         private Duration requestTimeout = DEFAULT_REQUEST_TIMEOUT;
         private RateLimit rateLimit = RateLimit.defaults();
         private Sleeper sleeper = Sleeper.THREAD;
         private Locale messageLocale = Locale.ENGLISH;
+        private int responseSizeLimit = FioHttp.RESPONSE_SIZE_LIMIT;
 
         private Builder(FioToken token) {
             this.token = requireNonNull(token, "token");
         }
 
         /**
-         * Points the client at another address, for example a stub server in tests.
+         * Points the client at another address, for example a stub server in tests. The token travels in the
+         * request path, so the address has to be {@code https}; plain {@code http} is accepted only for the
+         * loopback addresses {@code 127.0.0.1} and {@code [::1]}, or after {@link #allowPlainHttp()}.
          *
-         * @param baseUri an absolute URI, {@link #DEFAULT_BASE_URI} by default
+         * @param baseUri an absolute URI with a host and without user info, query or fragment,
+         *        {@link #DEFAULT_BASE_URI} by default
          * @return this builder
+         * @throws IllegalArgumentException when the URI is relative, has no host the JDK can send a request to,
+         *         carries user info, a query or a fragment, or is plain {@code http} to a host that is not a
+         *         loopback address
          */
         public Builder baseUri(URI baseUri) {
             requireNonNull(baseUri, "baseUri");
             if (!baseUri.isAbsolute()) {
                 throw new IllegalArgumentException("The Fio API base URI must be absolute: " + baseUri);
             }
-            if (!"https".equals(baseUri.getScheme()) && !isLoopback(baseUri)) {
+            if (baseUri.getHost() == null) {
+                throw new IllegalArgumentException("The Fio API base URI must name a host: " + baseUri);
+            }
+            if (baseUri.getRawUserInfo() != null || baseUri.getRawQuery() != null || baseUri.getRawFragment() != null) {
+                throw new IllegalArgumentException(
+                        "The Fio API base URI must not carry user info, a query or a fragment, the request path is appended to it: " + baseUri);
+            }
+            if (!"https".equals(baseUri.getScheme()) && !isPlainHttpToLoopback(baseUri)) {
                 throw new IllegalArgumentException("The Fio API base URI must use https, the token travels in it: " + baseUri);
             }
             this.baseUri = baseUri;
@@ -406,13 +449,34 @@ public interface FioClient {
         }
 
         /**
+         * Lets {@link #baseUri(URI)} accept plain {@code http} to any host, for a stub on another machine or in
+         * another container. Every request then carries the token unencrypted to that host, so this is for tests
+         * only; the production address needs nothing of the kind.
+         *
+         * @return this builder
+         */
+        public Builder allowPlainHttp() {
+            this.plainHttpAllowed = true;
+            return this;
+        }
+
+        /**
          * Sends the requests through a given HTTP client, for example one with a proxy or a custom SSL context.
+         * The client must not follow redirects, since a redirect could carry the token to another host; the
+         * JDK's default, {@link HttpClient.Redirect#NEVER}, is right.
          *
          * @param httpClient the client; by default one with a 10-second connect timeout
          * @return this builder
+         * @throws IllegalArgumentException when the client follows redirects
          */
         public Builder httpClient(HttpClient httpClient) {
-            this.httpClient = requireNonNull(httpClient, "httpClient");
+            requireNonNull(httpClient, "httpClient");
+            if (httpClient.followRedirects() != HttpClient.Redirect.NEVER) {
+                throw new IllegalArgumentException(
+                        "The HTTP client must not follow redirects (Redirect.NEVER), a redirect could carry the token elsewhere: "
+                                + httpClient.followRedirects());
+            }
+            this.httpClient = httpClient;
             return this;
         }
 
@@ -474,9 +538,17 @@ public interface FioClient {
             return this;
         }
 
-        private static boolean isLoopback(URI uri) {
-            String host = uri.getHost();
-            return "localhost".equals(host) || "127.0.0.1".equals(host) || "[::1]".equals(host);
+        private boolean isPlainHttpToLoopback(URI uri) {
+            return "http".equals(uri.getScheme()) && (plainHttpAllowed || LOOPBACK_HOSTS.contains(uri.getHost()));
+        }
+
+        Sleeper sleeper() {
+            return sleeper;
+        }
+
+        Builder responseSizeLimit(int responseSizeLimit) {
+            this.responseSizeLimit = responseSizeLimit;
+            return this;
         }
 
         /**
@@ -486,7 +558,8 @@ public interface FioClient {
          */
         public FioClient build() {
             RequestPacer pacer = new RequestPacer(rateLimit, clock, sleeper);
-            FioHttp http = new FioHttp(token, baseUri, httpClientOrDefault(), clock, requestTimeout, pacer, messageLocale);
+            FioHttp http = new FioHttp(
+                    token, baseUri, httpClientOrDefault(), clock, requestTimeout, pacer, messageLocale, responseSizeLimit);
             return new HttpFioClient(http);
         }
 

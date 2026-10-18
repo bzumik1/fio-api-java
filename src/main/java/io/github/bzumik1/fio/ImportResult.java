@@ -78,8 +78,9 @@ public record ImportResult(
     /**
      * What the bank said about the batch or about one order of it.
      *
-     * @param orderNumber the position of the order in the batch, from 1, or {@code null} when the message is
-     *        about the whole batch
+     * @param orderNumber the position of the order in the submitted batch (for an uploaded file, in the file),
+     *        from 1, or {@code null} when the message is about the whole batch or when the bank's numbering could
+     *        not be mapped back to the batch, in which case every message of the answer has none
      * @param status the status of that order, or {@code null} when the bank gave none
      * @param text the message
      */

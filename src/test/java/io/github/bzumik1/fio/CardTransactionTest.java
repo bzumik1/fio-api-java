@@ -103,4 +103,9 @@ class CardTransactionTest {
                 null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null);
     }
+
+    @Test
+    void should_reject_with_parameter_name_when_type_looked_up_given_null_label() {
+        assertThatNullPointerException().isThrownBy(() -> CardTransactionType.fromLabel(null)).withMessage("label");
+    }
 }

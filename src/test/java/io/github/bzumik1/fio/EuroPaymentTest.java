@@ -128,15 +128,14 @@ class EuroPaymentTest {
     void should_keep_three_lines_when_built_given_three_remittance_lines_of_35_characters() {
         String longest = "x".repeat(35);
 
-        assertThat(euroBuilder().remittanceInfo(longest).remittanceInfo(longest).remittanceInfo(longest).build()
+        assertThat(euroBuilder().remittanceInfo(longest, longest, longest).build()
                 .remittanceInfo()).containsExactly(longest, longest, longest);
     }
 
     @Test
     void should_reject_when_built_given_fourth_remittance_line() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> euroBuilder().remittanceInfo("1").remittanceInfo("2").remittanceInfo("3")
-                        .remittanceInfo("4").build())
+                .isThrownBy(() -> euroBuilder().remittanceInfo("1", "2", "3", "4").build())
                 .withMessage("At most 3 remittance lines are allowed, not 4");
     }
 

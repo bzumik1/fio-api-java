@@ -51,4 +51,16 @@ class PaymentBatchTest {
     void should_reject_when_created_given_missing_order() {
         assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of(domestic(), null));
     }
+
+    @Test
+    void should_name_the_position_when_created_given_null_order_in_the_list() {
+        List<PaymentOrder> orders = new ArrayList<>();
+        orders.add(domestic());
+        orders.add(null);
+
+        assertThatNullPointerException().isThrownBy(() -> new PaymentBatch(orders)).withMessage("orders[1] is null");
+        assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of(domestic(), null)).withMessage("orders[1] is null");
+        assertThatNullPointerException().isThrownBy(() -> PaymentBatch.of((PaymentOrder[]) null)).withMessage("orders");
+        assertThatNullPointerException().isThrownBy(() -> new PaymentBatch(null)).withMessage("orders");
+    }
 }

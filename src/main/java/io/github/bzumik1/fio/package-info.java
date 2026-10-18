@@ -1,7 +1,9 @@
 /**
  * A client of the Fio banka REST API. Start with {@link io.github.bzumik1.fio.FioClient}.
  *
- * <p>Nothing in this package accepts or returns {@code null} unless marked {@link org.jspecify.annotations.Nullable}.
+ * <p>Nothing in this package accepts or returns {@code null} unless marked {@link org.jspecify.annotations.Nullable};
+ * the exceptions alone return {@link java.util.Optional} for what they may lack, as they are read far from where
+ * they are thrown.
  *
  * <p>The records that carry what the bank sent ({@link io.github.bzumik1.fio.Transaction},
  * {@link io.github.bzumik1.fio.AccountInfo}, {@link io.github.bzumik1.fio.CardTransaction},

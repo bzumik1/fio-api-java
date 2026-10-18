@@ -14,7 +14,7 @@ final class RequestPacer {
     private final RateLimit rateLimit;
     private final Clock clock;
     private final Sleeper sleeper;
-    private final ReentrantLock lock = new ReentrantLock();
+    private final ReentrantLock lock = new ReentrantLock(true);
     private volatile Instant nextSlot = Instant.MIN;
 
     RequestPacer(RateLimit rateLimit, Clock clock, Sleeper sleeper) {

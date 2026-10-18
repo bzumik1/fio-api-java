@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
  * <p>Constants may be added in a minor release when Fio offers a new format, so a {@code switch} over this type
  * needs a {@code default} branch.
  */
-public enum MerchantFormat {
+public enum MerchantFormat implements DownloadFormat {
 
     /** Fio's own XML, which the typed download reads. */
     XML("xml", "application/xml", StandardCharsets.UTF_8),
@@ -31,6 +31,7 @@ public enum MerchantFormat {
      *
      * @return the extension
      */
+    @Override
     public String extension() {
         return extension;
     }
@@ -40,6 +41,7 @@ public enum MerchantFormat {
      *
      * @return the media type
      */
+    @Override
     public String mediaType() {
         return mediaType;
     }
@@ -49,6 +51,7 @@ public enum MerchantFormat {
      *
      * @return the documented charset
      */
+    @Override
     public Charset charset() {
         return charset;
     }

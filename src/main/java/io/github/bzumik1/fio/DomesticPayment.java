@@ -89,7 +89,10 @@ public record DomesticPayment(
         STANDARD("431001"),
         /** A priority payment, code 431005. */
         PRIORITY("431005"),
-        /** A direct debit order, code 431022. */
+        /**
+         * A direct debit order, code 431022: the money is collected the other way round, from the account in
+         * {@link DomesticPayment#to()} to the Fio account in {@link DomesticPayment#from()}.
+         */
         DIRECT_DEBIT("431022");
 
         private final String code;
@@ -98,12 +101,7 @@ public record DomesticPayment(
             this.code = code;
         }
 
-        /**
-         * Returns the code Fio uses for the type.
-         *
-         * @return the code
-         */
-        public String code() {
+        String code() {
             return code;
         }
     }

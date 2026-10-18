@@ -57,9 +57,7 @@ final class PaymentSamples {
                 .bic("ABAGATWWXXX")
                 .comment("Erste Zahlung")
                 .beneficiary(new Beneficiary("Hans Gruber", "Gugitzgasse 2", "Wien", "AT"))
-                .remittanceInfo("Rechnung 2026-17")
-                .remittanceInfo("Kunde 4711")
-                .remittanceInfo("Danke")
+                .remittanceInfo("Rechnung 2026-17", "Kunde 4711", "Danke")
                 .paymentReason("110")
                 .type(EuroPayment.Type.INSTANT)
                 .build();
@@ -84,9 +82,7 @@ final class PaymentSamples {
     static ForeignPayment fullForeign() {
         return foreignBuilder()
                 .comment("Payment a0315")
-                .remittanceInfo("Room 12")
-                .remittanceInfo("Two nights")
-                .remittanceInfo("Thank you")
+                .remittanceInfo("Payment for hotel 032013", "Room 12", "Two nights", "Thank you")
                 .charges(ForeignPayment.Charges.BENEFICIARY)
                 .build();
     }

@@ -426,8 +426,9 @@ class HttpPaymentsTest {
         FioAuthorizationException failure = catchThrowableOfType(FioAuthorizationException.class,
                 () -> client.payments().submit(PaymentBatch.of(domestic())));
 
-        assertThat(failure).hasMessage("Fio API request POST " + server.baseUri()
-                + "/import/ was refused with HTTP 500: the token does not exist, has expired or is not active");
+        assertThat(failure).hasMessageContaining("POST " + server.baseUri() + "/import/")
+                .hasMessageContaining("refused with HTTP 500")
+                .hasMessageContaining("could not read the request");
         assertThat(failure.statusCode()).hasValue(500);
     }
 

@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
  * <p>Constants may be added in a minor release when Fio offers a new format, so a {@code switch} over this type
  * needs a {@code default} branch.
  */
-public enum StatementFormat {
+public enum StatementFormat implements DownloadFormat {
 
     /** Semicolon-separated values. */
     CSV("csv", "text/csv", StandardCharsets.UTF_8),
@@ -47,6 +47,7 @@ public enum StatementFormat {
      *
      * @return the extension
      */
+    @Override
     public String extension() {
         return extension;
     }
@@ -56,6 +57,7 @@ public enum StatementFormat {
      *
      * @return the media type
      */
+    @Override
     public String mediaType() {
         return mediaType;
     }
@@ -65,6 +67,7 @@ public enum StatementFormat {
      *
      * @return the documented charset
      */
+    @Override
     public Charset charset() {
         return charset;
     }

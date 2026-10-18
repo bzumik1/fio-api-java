@@ -77,4 +77,19 @@ class MoneyTest {
     void should_reject_naming_the_problem_when_created_given_unknown_currency() {
         assertThatIllegalArgumentException().isThrownBy(() -> Money.of("1.00", "XYZ")).withMessageContaining("currency");
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1E+1001", "1E-1001", "1E+999999999"})
+    void should_reject_when_created_given_scale_beyond_one_thousand(String amount) {
+        BigDecimal huge = new BigDecimal(amount);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> Money.czk(huge)).withMessageContaining("scale within");
+        assertThatIllegalArgumentException().isThrownBy(() -> new Money(huge, Currency.getInstance("EUR")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1E+1000", "1E-1000"})
+    void should_accept_when_created_given_scale_at_one_thousand(String amount) {
+        assertThat(Money.czk(new BigDecimal(amount)).amount()).isEqualByComparingTo(amount);
+    }
 }

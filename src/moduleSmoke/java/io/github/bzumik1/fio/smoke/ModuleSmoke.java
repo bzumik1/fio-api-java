@@ -32,7 +32,7 @@ public final class ModuleSmoke {
         server.start();
         try {
             URI base = URI.create("http://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort());
-            FioClient fio = FioClient.builder(FioToken.of("smoke")).baseUri(base).build();
+            FioClient fio = FioClient.builder(FioToken.of("module-smoke-test-token")).baseUri(base).build();
 
             AccountStatement fetched = fio.transactions().between(LocalDate.of(2012, 6, 26), LocalDate.of(2012, 6, 30)).fetch();
 

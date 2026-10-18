@@ -8,15 +8,22 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * A request to the Fio API failed. The subclasses name the documented refusals; this class itself is thrown for
- * any other status, and for an answer the client does not understand.
+ * A request to the Fio API failed. The subclasses name the documented refusals, an answer the client does not
+ * understand and a request that got no answer; this class itself is thrown for any other HTTP status.
  *
  * <p>The hierarchy is sealed, so a {@code switch} over it can be exhaustive. Every message and body has the token
- * masked.
+ * masked, and a body is cut to its first {@value #RESPONSE_BODY_LIMIT} characters. The status and the body are
+ * {@link OptionalInt} and {@link Optional} rather than nullable, as an exception is read far from where it is
+ * thrown.
  */
 public sealed class FioException extends RuntimeException
         permits FioRateLimitException, FioAuthorizationException, FioHistoryLockedException,
-        FioTooManyTransactionsException, FioTransportException {
+        FioTooManyTransactionsException, FioMalformedResponseException, FioTransportException {
+
+    /** The most characters of a response body an exception keeps. */
+    public static final int RESPONSE_BODY_LIMIT = 16 * 1024;
+
+    private static final String CUT_MARK = "\u2026";
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -49,13 +56,23 @@ public sealed class FioException extends RuntimeException
     public FioException(String message, int statusCode, @Nullable String responseBody, @Nullable Throwable cause) {
         super(message, cause);
         this.statusCode = statusCode;
-        this.responseBody = responseBody;
+        this.responseBody = cut(responseBody);
     }
 
-    FioException(String message, @Nullable Throwable cause) {
+    /**
+     * Creates an exception for a request that got no answer.
+     *
+     * @param message what happened, with the token masked
+     * @param cause the cause, with the token masked
+     */
+    public FioException(String message, @Nullable Throwable cause) {
         super(message, cause);
         this.statusCode = null;
         this.responseBody = null;
+    }
+
+    private static @Nullable String cut(@Nullable String body) {
+        return body == null || body.length() <= RESPONSE_BODY_LIMIT ? body : body.substring(0, RESPONSE_BODY_LIMIT) + CUT_MARK;
     }
 
     /**
@@ -68,7 +85,8 @@ public sealed class FioException extends RuntimeException
     }
 
     /**
-     * Returns the body of the answer with the token masked; empty when there was no answer.
+     * Returns the body of the answer with the token masked and cut to its first {@value #RESPONSE_BODY_LIMIT}
+     * characters, with an ellipsis after a cut; empty when there was no answer.
      *
      * @return the body
      */

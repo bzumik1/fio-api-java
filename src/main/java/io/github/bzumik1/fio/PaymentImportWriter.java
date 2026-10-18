@@ -33,7 +33,7 @@ final class PaymentImportWriter {
 
     void write(List<PaymentOrder> orders, OutputStream file) {
         try {
-            XMLStreamWriter xml = XMLOutputFactory.newFactory().createXMLStreamWriter(file, UTF_8);
+            XMLStreamWriter xml = XMLOutputFactory.newDefaultFactory().createXMLStreamWriter(file, UTF_8);
             xml.writeStartDocument(UTF_8, "1.0");
             xml.writeStartElement("Import");
             xml.writeNamespace(XSI, XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI);

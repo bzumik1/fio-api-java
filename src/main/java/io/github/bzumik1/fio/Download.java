@@ -57,7 +57,8 @@ public record Download(String mediaType, Charset charset, byte[] content) {
     }
 
     /**
-     * Returns the body decoded with {@link #charset()}.
+     * Returns the body decoded with {@link #charset()}, which is meaningful for a text format such as CSV or
+     * XML; a binary format such as PDF is read from {@link #content()}.
      *
      * @return the body as text
      */

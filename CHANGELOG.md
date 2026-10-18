@@ -10,8 +10,8 @@ All notable changes to this library are recorded here. The format follows
 
 - A client of the whole Fio banka REST API (version of 16 October 2025): transactions for a period or since the
   bank's bookmark, statements by number and the number of the last statement, the bookmark moves, card
-  transactions of a merchant, every download format the bank offers (JSON, XML, CSV, GPC, HTML, OFX, MT940,
-  CBA XML, PDF, STA) and payment import (domestic, euro and foreign payments built in Java or an ABO, Fio XML,
+  transactions of a merchant, every download format the bank offers (JSON, XML, CSV, GPC, HTML, OFX, MT940
+  as `sta`, CBA XML, SBA XML, PDF) and payment import (domestic, euro and foreign payments built in Java or an ABO, Fio XML,
   pain.001 or pain.008 file).
 - A fluent API: `fio.transactions().between(from, to).fetch()`, `fio.statements().latest()`,
   `fio.bookmark().moveAfterTransaction(id)`, `fio.merchant().between(from, to).fetch()`,
@@ -20,9 +20,13 @@ All notable changes to this library are recorded here. The format follows
   `PaymentSymbols`, `TransactionType` and `CardTransactionType` with the labels the bank uses.
 - A rate limiter that keeps the 30 seconds between requests the bank demands, shared by every thread using a
   client, and a bounded wait with a `FioRateLimitException` when the slot would come too late.
-- Exceptions that tell what happened: authorisation, rate limit, locked history, too many transactions, transport
-  (with whether the request may have reached the bank), malformed response. The token never appears in any of
-  them.
+- Exceptions that tell what happened: authorisation, rate limit, locked history (with the earliest available day
+  when the bank names it), too many transactions, malformed response, transport (with whether the request may
+  have reached the bank). The token never appears in any of them, and a response body is kept to its first
+  16 KiB.
+- Safety against a misbehaving network: an answer longer than 64 MiB is not read, the base URI has to be `https`
+  with a host and without query or fragment (plain `http` only to a loopback address or after an explicit
+  opt-out), and a custom `HttpClient` must not follow redirects.
 - Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations, Jackson as the only runtime
   dependency.
 

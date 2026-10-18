@@ -3,7 +3,6 @@ package io.github.bzumik1.fio;
 import org.jspecify.annotations.Nullable;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.bzumik1.fio.PaymentText.optional;
@@ -105,12 +104,7 @@ public record ForeignPayment(
             this.code = code;
         }
 
-        /**
-         * Returns the code Fio uses for the option.
-         *
-         * @return the code
-         */
-        public String code() {
+        String code() {
             return code;
         }
     }
@@ -128,7 +122,7 @@ public record ForeignPayment(
         private @Nullable LocalDate date;
         private @Nullable String comment;
         private @Nullable Beneficiary beneficiary;
-        private final List<String> remittanceInfo = new ArrayList<>();
+        private List<String> remittanceInfo = List.of();
         private Charges charges = Charges.SHARED;
         private @Nullable String paymentReason;
 
@@ -233,13 +227,13 @@ public record ForeignPayment(
         }
 
         /**
-         * Adds a line of information for the recipient.
+         * Sets the lines of information for the recipient, replacing any set before.
          *
-         * @param line up to 35 characters; one to four lines
+         * @param lines one to four lines of up to 35 characters each
          * @return this builder
          */
-        public Builder remittanceInfo(String line) {
-            remittanceInfo.add(requireNonNull(line, "line"));
+        public Builder remittanceInfo(String... lines) {
+            remittanceInfo = List.of(requireNonNull(lines, "lines"));
             return this;
         }
 

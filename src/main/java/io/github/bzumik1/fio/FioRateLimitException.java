@@ -24,10 +24,10 @@ public final class FioRateLimitException extends FioException {
     private final Instant retryAfter;
 
     /**
-     * Creates the exception.
+     * Creates the exception for a request the bank refused with HTTP 409.
      *
      * @param message what was refused, with the token masked
-     * @param responseBody the body of the refusal with the token masked, or {@code null} when nothing was sent
+     * @param responseBody the body of the refusal, with the token masked
      * @param retryAfter when the next request may go
      */
     public FioRateLimitException(String message, @Nullable String responseBody, Instant retryAfter) {
@@ -37,10 +37,18 @@ public final class FioRateLimitException extends FioException {
 
     private FioRateLimitException(String message, Instant retryAfter) {
         super(message, (Throwable) null);
-        this.retryAfter = retryAfter;
+        this.retryAfter = requireNonNull(retryAfter, "retryAfter");
     }
 
-    static FioRateLimitException notSent(String message, Instant retryAfter) {
+    /**
+     * Creates the exception for a request the client did not send, because the next slot would come after the
+     * wait the {@link RateLimit} allows; {@link #statusCode()} is empty.
+     *
+     * @param message why the request was not sent, with the token masked
+     * @param retryAfter when the next request may go
+     * @return the exception
+     */
+    public static FioRateLimitException notSent(String message, Instant retryAfter) {
         return new FioRateLimitException(message, retryAfter);
     }
 
