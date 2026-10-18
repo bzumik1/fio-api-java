@@ -4,7 +4,6 @@ junit = "6.0.3"
 assertj = "3.27.7"
 jspecify = "1.0.0"
 mavenPublish = "0.37.0"
-foojay = "1.0.0"
 
 [libraries]
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }

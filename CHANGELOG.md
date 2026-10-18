@@ -11,8 +11,8 @@ All notable changes to this library are recorded here. The format follows
 - A client of the whole Fio banka REST API (version of 16 October 2025): transactions for a period or since the
   bank's bookmark, statements by number and the number of the last statement, the bookmark moves, card
   transactions of a merchant, every download format the bank offers (JSON, XML, CSV, GPC, HTML, OFX, MT940
-  as `sta`, CBA XML, SBA XML, PDF) and payment import (domestic, euro and foreign payments built in Java or an ABO, Fio XML,
-  pain.001 or pain.008 file).
+  as `sta`, CBA XML, SBA XML, PDF) and payment import (domestic, euro and foreign payments built in Java or an
+  ABO, Fio XML, pain.001 or pain.008 file).
 - A fluent API: `fio.transactions().between(from, to).fetch()`, `fio.statements().latest()`,
   `fio.bookmark().moveAfterTransaction(id)`, `fio.merchant().between(from, to).fetch()`,
   `fio.payments().batch().domestic(p -> ...).submit()`.

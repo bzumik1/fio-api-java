@@ -284,8 +284,8 @@ builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` c
   (`DomesticAccount`), IBAN, BIC, currency, opening and closing balance (`Money`), the period, the statement
   number and the ids of the first, last and bookmarked movement.
 - `Transaction`: one movement. `id`, `date`, `amount` (`Money`, negative for outgoing), `type`
-  (`TransactionType`, one of the 43 distinct types in Fio's list, which repeats two of its 45 entries, or `OTHER`) with the bank's `typeLabel`, `counterparty`
-  (account, name, bank name, BIC), `symbols` (variable, constant, specific), `userIdentification`, `executedBy`,
+  (`TransactionType`, one of the 43 distinct types in Fio's list, which repeats two of its 45 entries, or
+  `OTHER`) with the bank's `typeLabel`, `counterparty` (account, name, bank name, BIC), `symbols` (variable, constant, specific), `userIdentification`, `executedBy`,
   `messageForRecipient`, `instructionId`, `detail`, `comment`, `payerReference`, and `columns`, every column the
   bank sent by its number, for anything new.
 - `Money(amount, currency)`, which keeps the bank's scale but compares by value (`1.0 CZK` equals `1.00 CZK`),

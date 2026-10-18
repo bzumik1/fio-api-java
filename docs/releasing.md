@@ -19,8 +19,8 @@ Before tagging, in [CHANGELOG.md](../CHANGELOG.md):
 
 1. Rename the `## [Unreleased]` section to the version with the date, `## [1.0.0] - 2026-10-20`, and start a
    new empty `## [Unreleased]` section above it. The tag check fails when there is no `## [X.Y.Z]` heading for
-   the tag, and the GitHub release takes everything between that heading and the next `## [` heading as its
-   notes.
+   the tag, and the GitHub release takes everything between that heading and the next `## [` heading, or the
+   link references at the bottom of the file, whichever comes first, as its notes.
 2. Add the link references at the bottom of the file, as Keep a Changelog prescribes:
    ```
    [Unreleased]: https://github.com/bzumik1/fio-api-java/compare/v1.0.0...HEAD
@@ -48,8 +48,8 @@ After a release, bump `gradle.properties` to the next snapshot.
    git config --global user.signingkey <key id>   # so that git tag -s uses the same key
    ```
    RSA 4096 is the key type every validator on Central's side accepts; an EdDSA key signs just as well but its
-   acceptance by the portal's validation has not been confirmed. The key expires after three years. Before that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send
-   it to the key server again and replace the `SIGNING_KEY` secret; a release signed with an expired key is
+   acceptance by the portal's validation has not been confirmed. The key expires after three years. Before
+   that, extend it (`gpg --quick-set-expire <fingerprint> 3y`), send it to the key server again and replace the `SIGNING_KEY` secret; a release signed with an expired key is
    refused by Central.
 4. **Repository settings**, described in the next section; the secrets from steps 2 and 3 go into the
    `maven-central` environment.
@@ -107,11 +107,14 @@ failed decides what to do.
 - **Publication failed.** The job builds and signs first, uploads the jars and their `.asc` signatures as the
   workflow artifact `jars`, and only then publishes. Read the job log: a missing or expired secret, a key not
   found on the key server, or a validation error from Central (the POM, the signature, a missing javadoc jar).
-  Nothing is on Central until the plugin has uploaded and released the deployment. A cause outside the
-  repository (a secret, the key server, Central itself) is fixed in place and the job re-run ("Re-run failed
-  jobs"; it builds and signs again and replaces the `jars` artifact); a cause in the repository is fixed on
-  `main`, after which the tag is deleted and recreated as above. If the log shows the deployment was released, the version is
-  out and the tag must stay.
+  Nothing is on Central until the plugin has uploaded and released the deployment. Before anything else, open
+  Deployments at https://central.sonatype.com: a deployment that is publishing or published means the version
+  is out (the job may have been killed by its timeout while Central was still validating), so the tag must
+  stay, and the GitHub release is created by hand as the next point describes; a deployment marked failed is
+  dropped there first. Then, a cause outside the repository (a secret, the key server, Central itself) is fixed
+  in place and the job re-run ("Re-run failed jobs"; it builds and signs again and replaces the `jars`
+  artifact); a cause in the repository is fixed on `main`, after which the tag is deleted and recreated as
+  above.
 - **GitHub release failed** after a successful publication. The version is on Central and cannot be changed, so
   do not delete the tag. Re-run the failed job ("Re-run failed jobs" in the Actions tab): the release job
   creates the GitHub release if it does not exist yet and skips it if it does. If the job cannot be re-run,

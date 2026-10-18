@@ -35,8 +35,9 @@ follows redirects would re-send the request, token included, to whatever host th
 ## Limits on what is read
 
 A response body is read up to 256 MiB by default (`maximumResponseSize` on the builder lowers it); a larger
-answer fails with a `FioException` instead of exhausting the heap. The limit is on the bytes received, not on the heap the parsed answer takes: a body made of millions of
-tiny elements or objects still costs many times its size in objects, so the limit guards against a runaway
+answer fails with a `FioException` instead of exhausting the heap. The limit is on the bytes received, not on
+the heap the parsed answer takes: a body made of millions of tiny elements or objects still costs many times
+its size in objects, so the limit guards against a runaway
 download, not against a hostile bank host. The body stored in an exception is cut to its first 16 Ki characters.
 
 ## Dependencies
