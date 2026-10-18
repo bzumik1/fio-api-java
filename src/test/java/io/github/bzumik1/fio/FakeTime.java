@@ -5,14 +5,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class FakeTime {
 
     private final AtomicReference<Instant> now;
-    private final List<Duration> sleeps = new ArrayList<>();
+    private final List<Duration> sleeps = new CopyOnWriteArrayList<>();
 
     FakeTime(Instant start) {
         this.now = new AtomicReference<>(start);
@@ -39,8 +39,10 @@ final class FakeTime {
 
     Sleeper sleeper() {
         return duration -> {
-            sleeps.add(duration);
-            now.updateAndGet(current -> current.plus(duration));
+            synchronized (this) {
+                sleeps.add(duration);
+                advance(duration);
+            }
         };
     }
 

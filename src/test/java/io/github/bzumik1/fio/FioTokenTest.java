@@ -1,16 +1,16 @@
 package io.github.bzumik1.fio;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import static io.github.bzumik1.fio.StubBank.SECRET;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 class FioTokenTest {
-
-    private static final String SECRET = "aGEMtmwcsWAjPzhg3bPH3j7Iu15g56d66AdEbfIjqIgMR9Idh6u3";
 
     @Test
     void should_hide_value_when_printed_given_token() {
@@ -48,12 +48,15 @@ class FioTokenTest {
     }
 
     @Test
-    void should_tell_whether_text_holds_value_when_asked_given_token() {
-        FioToken token = FioToken.of(SECRET);
+    void should_find_value_when_asked_given_text_holding_token() {
+        assertThat(FioToken.of(SECRET).occursIn("x" + SECRET + "y")).isTrue();
+    }
 
-        assertThat(token.occursIn("x" + SECRET + "y")).isTrue();
-        assertThat(token.occursIn("nothing here")).isFalse();
-        assertThat(token.occursIn(null)).isFalse();
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "nothing here")
+    void should_not_find_value_when_asked_given_text_without_token(String text) {
+        assertThat(FioToken.of(SECRET).occursIn(text)).isFalse();
     }
 
     @Test
@@ -62,11 +65,13 @@ class FioTokenTest {
     }
 
     @Test
-    void should_compare_by_value_when_compared_given_other_tokens_and_objects() {
-        FioToken token = FioToken.of(SECRET);
+    void should_equal_with_same_hash_code_when_compared_given_token_with_same_value() {
+        assertThat(FioToken.of(SECRET)).isEqualTo(FioToken.of(SECRET)).hasSameHashCodeAs(FioToken.of(SECRET));
+    }
 
-        assertThat(token).isEqualTo(FioToken.of(SECRET)).hasSameHashCodeAs(FioToken.of(SECRET));
-        assertThat(token).isNotEqualTo(FioToken.of(SECRET + "x")).isNotEqualTo(SECRET).isNotEqualTo(null);
+    @Test
+    void should_differ_when_compared_given_other_token_its_value_or_null() {
+        assertThat(FioToken.of(SECRET)).isNotEqualTo(FioToken.of(SECRET + "x")).isNotEqualTo(SECRET).isNotEqualTo(null);
     }
 
     @Test
@@ -76,6 +81,7 @@ class FioTokenTest {
     }
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "FIO_API_TEST_TOKEN", matches = ".+")
     void should_read_from_process_environment_when_asked_given_variable_set_by_the_build() {
         assertThat(FioToken.fromEnvironment("FIO_API_TEST_TOKEN")).isEqualTo(FioToken.of("token-set-by-the-build-for-tests"));
     }
@@ -85,7 +91,14 @@ class FioTokenTest {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> FioToken.fromEnvironment("FIO_TEST_TOKEN", name -> null))
                 .withMessageContaining("FIO_TEST_TOKEN");
+    }
+
+    @Test
+    void should_reject_naming_the_variable_when_read_from_process_environment_given_unset_variable() {
+        String unset = "FIO_TOKEN_THAT_IS_NOT_SET_" + System.nanoTime();
+
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> FioToken.fromEnvironment("FIO_TOKEN_THAT_IS_NOT_SET_" + System.nanoTime()));
+                .isThrownBy(() -> FioToken.fromEnvironment(unset))
+                .withMessageContaining(unset);
     }
 }
