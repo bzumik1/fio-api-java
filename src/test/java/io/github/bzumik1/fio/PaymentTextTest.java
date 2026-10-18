@@ -142,7 +142,7 @@ class PaymentTextTest {
     @Test
     void should_accept_exactly_the_schema_codes_when_payment_reason_checked_given_every_three_digit_code() {
         Set<String> accepted = accepted(
-                IntStream.range(0, 1000).mapToObj(code -> String.format("%03d", code)),
+                IntStream.range(0, 1000).mapToObj(code -> String.format(Locale.ROOT, "%03d", code)),
                 PaymentText::paymentReason);
 
         assertThat(accepted).isEqualTo(new TreeSet<>(ImportSchema.enumeration("payment_reason_type")));

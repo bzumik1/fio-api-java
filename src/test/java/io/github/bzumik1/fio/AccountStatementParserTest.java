@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
@@ -568,6 +569,6 @@ class AccountStatementParserTest {
     }
 
     private static String column(int id, String name, String jsonValue) {
-        return "\"column%d\":{\"value\":%s,\"name\":\"%s\",\"id\":%d}".formatted(id, jsonValue, name, id);
+        return String.format(Locale.ROOT, "\"column%d\":{\"value\":%s,\"name\":\"%s\",\"id\":%d}", id, jsonValue, name, id);
     }
 }
