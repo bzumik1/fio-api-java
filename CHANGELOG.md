@@ -22,23 +22,17 @@ All notable changes to this library are recorded here. The format follows
 - A rate limiter that keeps the 30 seconds between requests the bank demands, shared by every thread using a
   client, and a bounded wait with a `FioRateLimitException` when the slot would come too late.
 - Exceptions that tell what happened: authorisation, rate limit, locked history (with the earliest available day
-  when the bank names it), too many transactions, malformed response, an answer too large to read, transport
-  (with whether the request may have reached the bank, which a failed TLS handshake certainly did not), and
-  `mayHaveTakenEffect()` on every one, which says whether a submitted batch may have been accepted or the
-  bookmark moved, so it is checked before trying again. The token never appears in any of
-  them, not even cut short, a response body is kept to its first 16 Ki characters and a value quoted from it to
-  its first 200.
-- Payment batches refused before anything is sent: an order added after the batch was submitted, orders from
-  more than one account (a token belongs to one), and a batch whose Fio XML is larger than the 2 MiB the bank
-  imports.
+  when the bank names it), too many transactions, malformed response, an answer too large to read and transport
+  (with whether the request may have reached the bank, which a failed TLS handshake certainly did not), each
+  with `mayHaveTakenEffect()`, which says whether a submitted batch may have been accepted or the bookmark
+  moved. The token never appears in any of them, not even cut short, a response body is kept to its first
+  16 Ki characters and a value quoted from it to its first 200.
+- Payment batches are checked before sending: one account, one currency, at most 2 MiB of Fio XML.
 - Bounded response numbers: a decimal the bank sends has at most 40 digits before the point and 1000 after it,
   so a hostile answer cannot make the client build a huge `BigDecimal`.
-- `allowPlainHttp()` works whether it is called before or after `baseUri(...)`, since `build()` checks the scheme
-  of the base URI; `HTTPS://` is accepted like `https://`.
 - Safety against a misbehaving network: an answer longer than 256 MiB (the builder's `maximumResponseSize`) is
-  not read, the base URI has to be `https`
-  with a host and without query or fragment (plain `http` only to a loopback address or after an explicit
-  opt-out), and a custom `HttpClient` must not follow redirects.
+  not read, the base URI has to be `https` with a host and without query or fragment (plain `http` only to a
+  loopback address or after `allowPlainHttp()`), and a custom `HttpClient` must not follow redirects.
 - Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations; the runtime dependencies are
   Jackson and the JSpecify annotations.
 
