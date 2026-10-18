@@ -389,16 +389,18 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_without_reading_when_downloading_given_answer_longer_than_the_limit() {
+    void should_raise_too_large_failure_without_reading_when_downloading_given_answer_longer_than_the_limit() {
         FioClient limited = bank.builder().maximumResponseSize(1024).build();
         server().respondWith(200, "application/pdf", new byte[4096]);
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class)
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class)
                 .hasMessageContaining("more than 1024 bytes")
                 .hasMessageNotContaining(SECRET);
+        assertThat(((FioResponseTooLargeException) failure).limit()).isEqualTo(1024);
+        assertThat(failure.mayHaveTakenEffect()).isTrue();
         assertThat(failure.statusCode()).isEmpty();
         assertThat(failure.responseBody()).isEmpty();
         assertThat(failure.getCause()).hasMessageContaining("longer than 1024 bytes");
@@ -415,25 +417,25 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_answer_one_byte_over_the_limit() {
+    void should_raise_too_large_failure_when_downloading_given_answer_one_byte_over_the_limit() {
         FioClient limited = bank.builder().maximumResponseSize(4096).build();
         server().respondWith(200, "application/pdf", new byte[4097]);
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 4096 bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 4096 bytes");
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_answer_over_the_limit_in_several_parts() {
+    void should_raise_too_large_failure_when_downloading_given_answer_over_the_limit_in_several_parts() {
         RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, List.of(new byte[600], new byte[600], new byte[600]));
         FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 1024 bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 1024 bytes");
     }
 
     @Test
@@ -444,7 +446,7 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_default_builder_and_answer_over_256_mib() {
+    void should_raise_too_large_failure_when_downloading_given_default_builder_and_answer_over_256_mib() {
         byte[] mebibyte = new byte[1024 * 1024];
         List<byte[]> parts = new ArrayList<>(Collections.nCopies(256, mebibyte));
         parts.add(new byte[1]);
@@ -453,7 +455,9 @@ class FioClientTest {
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> bank.builder().httpClient(http).build().statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than " + 256 * 1024 * 1024 + " bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class)
+                .hasMessageContaining("more than " + 256 * 1024 * 1024 + " bytes");
+        assertThat(((FioResponseTooLargeException) failure).limit()).isEqualTo(256 * 1024 * 1024);
     }
 
     @Test
@@ -768,6 +772,7 @@ class FioClientTest {
                 FioHistoryLockedException.class,
                 FioTooManyTransactionsException.class,
                 FioMalformedResponseException.class,
-                FioTransportException.class);
+                FioTransportException.class,
+                FioResponseTooLargeException.class);
     }
 }

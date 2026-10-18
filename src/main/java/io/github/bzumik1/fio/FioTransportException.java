@@ -8,9 +8,9 @@ import java.io.Serial;
  * The bank did not answer: the connection was refused, the request timed out or the thread was interrupted. There
  * is no status code and no body.
  *
- * <p>{@link #mayHaveReachedTheBank()} tells whether the request may have gone out before the failure. When it may
- * have, the bank may have acted on it: a payment batch may be waiting for authorisation, or the bookmark may have
- * moved. Such a request is not to be repeated blindly; check in Fio internet banking first.
+ * <p>{@link #mayHaveReachedTheBank()} tells whether the request may have gone out before the failure, and
+ * {@link #mayHaveTakenEffect()} returns the same: when it may have, check the pending batches in Fio internet
+ * banking, or move the bookmark back, before trying again.
  *
  * <p>The cause is the JDK's exception when its text is free of the token; when the token appears anywhere in the
  * cause chain, the chain is replaced by copies that keep the masked messages but not the classes.
@@ -45,6 +45,16 @@ public final class FioTransportException extends FioException {
      * @return whether the outcome of the request is unknown
      */
     public boolean mayHaveReachedTheBank() {
+        return mayHaveReachedTheBank;
+    }
+
+    /**
+     * Returns {@link #mayHaveReachedTheBank()}: a request that may have reached the bank may have been acted on.
+     *
+     * @return whether the request may have reached the bank
+     */
+    @Override
+    public boolean mayHaveTakenEffect() {
         return mayHaveReachedTheBank;
     }
 }

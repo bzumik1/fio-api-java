@@ -171,13 +171,11 @@ banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNIN
 message per rejected order. A batch the bank checked and refused comes back as a
 result whose `isAccepted()` is false, not as an exception.
 
-When a submission fails with `FioTransportException`, read `mayHaveReachedTheBank()` before trying again: a
-timeout after the request went out means the batch may already be waiting for authorisation, and submitting it
-again would pay twice. A `FioMalformedResponseException`, or a plain `FioException` without a status for an
-answer over the size limit, is worse still: the bank received the batch and answered, so it may have accepted it.
-In all three cases check the pending batches in internet banking first. The same holds for `sinceBookmark()`,
-where an answer lost on the way or one the client could not read may already have moved the bookmark: move it
-back to the last stored movement and download the movements again.
+When a submission fails, read the exception's `mayHaveTakenEffect()` before trying again: when it is true (a
+timeout after the request went out, an answer the client could not read or one too long to read), the batch may
+already be waiting for authorisation, and submitting it again would pay twice, so check the pending batches in
+internet banking first. The same holds for `sinceBookmark()`, which may already have moved the bookmark: move it
+back to the last stored movement before downloading again.
 
 ### Configuration
 
@@ -231,8 +229,8 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
   failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
-- An answer longer than 256 MiB is not read and fails with a plain `FioException`. The largest answer the bank
-  documents, 50 000 movements as JSON with every field at its longest, is about 254 MiB; a client that only
+- An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer the
+  bank documents, 50 000 movements as JSON with every field at its longest, is about 254 MiB; a client that only
   downloads short periods can lower the size with the builder's `maximumResponseSize`.
 
 ## Errors
@@ -244,13 +242,12 @@ first 200 characters. The hierarchy is sealed, so a `switch` over it is exhausti
 reads the day the bank's answer names, when it names one), `FioTooManyTransactionsException`,
 `FioMalformedResponseException` (a success status with a body the client does not understand),
 `FioTransportException` (no answer: connection, TLS handshake, timeout, interruption; its
-`mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any other
-status, or without a status for an answer over the size the client reads.
+`mayHaveReachedTheBank()` says whether the request may have gone out), `FioResponseTooLargeException` (an answer
+longer than the client reads, with its `limit()`) and the plain `FioException` for any other status.
 
-A `FioMalformedResponseException`, and a plain `FioException` for an answer over that size, come after the bank
-received the request and acted on it. A download by period or number can be asked again; after `sinceBookmark()`
-move the bookmark back before downloading again, and after a payment submission check the pending batches in
-internet banking before submitting again.
+When `mayHaveTakenEffect()` is true, the bank may have acted on the request: after a payment submission check the
+pending batches in internet banking before submitting again, and after `sinceBookmark()` move the bookmark back
+before downloading again. A download by period or number can simply be asked again.
 
 ## Compatibility
 

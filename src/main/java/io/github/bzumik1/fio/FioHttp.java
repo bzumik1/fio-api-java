@@ -142,8 +142,8 @@ final class FioHttp {
 
     private FioException failed(HttpRequest request, Throwable cause) {
         if (cause instanceof ResponseTooLargeException) {
-            return new FioException(describe(request) + " was answered with more than " + responseSizeLimit
-                    + " bytes, which this client does not read", TokenMaskedFailure.withoutToken(cause, token));
+            return new FioResponseTooLargeException(describe(request) + " was answered with more than " + responseSizeLimit
+                    + " bytes, which this client does not read", responseSizeLimit, TokenMaskedFailure.withoutToken(cause, token));
         }
         return new FioTransportException(
                 describe(request) + " failed: " + token.mask(cause.toString()),

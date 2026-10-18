@@ -527,6 +527,31 @@ class HttpPaymentsTest {
     }
 
     @Test
+    void should_say_the_batch_may_have_been_accepted_when_submitted_given_answer_longer_than_the_limit() {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient limited = bank.builder().maximumResponseSize(64).build();
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.payments().submit(PaymentBatch.of(domestic())));
+
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class)
+                .hasMessageContainingAll("POST ", "more than 64 bytes");
+        assertThat(failure.mayHaveTakenEffect()).isTrue();
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
+    }
+
+    @Test
+    void should_say_the_batch_may_have_been_accepted_when_submitted_given_answer_this_client_cannot_read() {
+        answer(200, "<html>Údržba</html>");
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> client().payments().submit(PaymentBatch.of(domestic())));
+
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
+        assertThat(failure.mayHaveTakenEffect()).isTrue();
+    }
+
+    @Test
     void should_raise_failure_with_status_and_masked_body_when_submitted_given_http_error_with_import_answer() {
         answer(400, "<responseImport><result><errorCode>11</errorCode><status>error</status>"
                 + "<message>Syntaktická chyba, token " + SECRET + "</message></result></responseImport>");

@@ -22,8 +22,10 @@ All notable changes to this library are recorded here. The format follows
 - A rate limiter that keeps the 30 seconds between requests the bank demands, shared by every thread using a
   client, and a bounded wait with a `FioRateLimitException` when the slot would come too late.
 - Exceptions that tell what happened: authorisation, rate limit, locked history (with the earliest available day
-  when the bank names it), too many transactions, malformed response, transport (with whether the request may
-  have reached the bank, which a failed TLS handshake certainly did not). The token never appears in any of
+  when the bank names it), too many transactions, malformed response, an answer too large to read, transport
+  (with whether the request may have reached the bank, which a failed TLS handshake certainly did not), and
+  `mayHaveTakenEffect()` on every one, which says whether a submitted batch may have been accepted or the
+  bookmark moved, so it is checked before trying again. The token never appears in any of
   them, not even cut short, a response body is kept to its first 16 Ki characters and a value quoted from it to
   its first 200.
 - Payment batches refused before anything is sent: an order added after the batch was submitted, orders from
