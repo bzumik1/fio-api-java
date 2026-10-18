@@ -305,6 +305,8 @@ public interface FioClient {
          *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
          *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
          *         before submitting again
+         * @throws IllegalArgumentException when the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, the most the bank imports at once
          */
         ImportResult submit(PaymentBatch batch);
 
@@ -382,9 +384,11 @@ public interface FioClient {
          *         {@link FioTransportException} whose {@link FioTransportException#mayHaveReachedTheBank()} is
          *         {@code true} leaves the outcome unknown, so check the pending batches in Fio internet banking
          *         before submitting again
-         * @throws IllegalStateException when the batch is empty or was already submitted; a {@link PaymentBatch}
-         *         built by hand refuses to be empty with an {@link IllegalArgumentException} instead, as there
-         *         it is an argument
+         * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
+         *         one the token belongs to), the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the first three are an
+         *         {@link IllegalArgumentException} from {@link PaymentBatch} and {@link Payments#submit(PaymentBatch)},
+         *         where the batch is an argument
          */
         ImportResult submit();
     }

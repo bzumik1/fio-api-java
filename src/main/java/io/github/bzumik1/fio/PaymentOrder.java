@@ -12,8 +12,9 @@ public sealed interface PaymentOrder permits DomesticPayment, EuroPayment, Forei
 
     /**
      * Returns the Fio account the order is submitted for: the one the money leaves, or, for a
-     * {@link DomesticPayment.Type#DIRECT_DEBIT direct debit}, the one it is collected to. Its currency is the
-     * currency of the order.
+     * {@link DomesticPayment.Type#DIRECT_DEBIT direct debit}, the one it is collected to. It is the account the
+     * token belongs to, so every order of a {@link PaymentBatch} is from it and in its currency: a SEPA payment
+     * needs a euro account, and with it its own token and batch.
      *
      * @return the account of the account holder submitting the order
      */

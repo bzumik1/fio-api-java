@@ -51,7 +51,7 @@ class ReadmeExamplesTest {
     private static final Pattern JAVADOC_MARGIN = Pattern.compile("(?m)^\\s*\\* ?");
     private static final Pattern HEADING = Pattern.compile("(?m)^#+ (.+)$");
     private static final String PACKAGE = "readme";
-    private static final String FROM_ENVIRONMENT = "FioToken.fromEnvironment(\"FIO_TOKEN\")";
+    private static final Pattern FROM_ENVIRONMENT = Pattern.compile("FioToken\\.fromEnvironment\\(\"[A-Z_]+\"\\)");
     private static final String NEW_BUILDER = "FioClient.builder(";
 
     @RegisterExtension
@@ -69,7 +69,7 @@ class ReadmeExamplesTest {
         }
 
         String runnableCode() {
-            return code.replace(FROM_ENVIRONMENT, "token").replace(NEW_BUILDER, "builder(");
+            return FROM_ENVIRONMENT.matcher(code).replaceAll("token").replace(NEW_BUILDER, "builder(");
         }
     }
 
@@ -137,19 +137,35 @@ class ReadmeExamplesTest {
         assertThat(bank.server().requests()).isNotEmpty();
     }
 
-    @Test
-    void should_submit_the_batch_when_executed_given_payment_example() throws Exception {
-        answerEveryDocumentedRequest();
-        Example payment = readmeExamples().stream()
+    private static List<Example> paymentExamples() {
+        return readmeExamples().stream()
                 .filter(example -> example.name().endsWith("(Payment orders)"))
-                .findFirst()
-                .orElseThrow();
+                .collect(Collectors.toList());
+    }
 
-        run(payment);
+    @Test
+    void should_submit_two_koruna_payments_from_one_account_when_executed_given_payment_example() throws Exception {
+        answerEveryDocumentedRequest();
+
+        run(paymentExamples().get(0));
 
         assertThat(bank.server().requests()).containsExactly(new RecordedRequest("POST", "/v1/rest/import/", "application/xml"));
         assertThat(bank.server().bodies()).singleElement().extracting(StubFioServer.RecordedBody::text).asString()
-                .contains("<DomesticTransaction>", "<T2Transaction>", "<amount>1250.00</amount>", "<amount>99.90</amount>");
+                .contains("<amount>1250.00</amount>", "<amount>380.50</amount>")
+                .doesNotContain("<T2Transaction>", "<currency>EUR</currency>")
+                .containsPattern("(?s)(<accountFrom>2400222222</accountFrom>.*){2}")
+                .containsPattern("(?s)(<DomesticTransaction>.*){2}");
+    }
+
+    @Test
+    void should_submit_a_sepa_payment_alone_when_executed_given_euro_account_example() throws Exception {
+        answerEveryDocumentedRequest();
+
+        run(paymentExamples().get(1));
+
+        assertThat(bank.server().bodies()).singleElement().extracting(StubFioServer.RecordedBody::text).asString()
+                .contains("<T2Transaction>", "<currency>EUR</currency>", "<amount>99.90</amount>")
+                .doesNotContain("<DomesticTransaction>");
     }
 
     private void run(Example example) throws Exception {

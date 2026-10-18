@@ -27,11 +27,11 @@ import java.util.stream.Stream;
 import static io.github.bzumik1.fio.PaymentSamples.DUE;
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
-import static io.github.bzumik1.fio.PaymentSamples.fullDomestic;
 import static io.github.bzumik1.fio.StubBank.NOW;
 import static io.github.bzumik1.fio.StubBank.SECRET;
 import static io.github.bzumik1.fio.Throwables.printed;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
@@ -452,16 +452,78 @@ class HttpPaymentsTest {
                 .withMessage("The batch holds no payment order to submit");
     }
 
-    @Test
-    void should_reject_without_request_when_submitted_given_orders_larger_than_fio_imports() {
+    private static List<PaymentOrder> ordersLargerThanFioImports() {
+        DomesticPayment longest = PaymentSamples.domesticBuilder()
+                .messageForRecipient("\u20ac".repeat(140))
+                .comment("\u20ac".repeat(140))
+                .build();
         List<PaymentOrder> orders = new ArrayList<>();
-        for (int order = 0; order < 5000; order++) {
-            orders.add(fullDomestic());
+        for (int order = 0; order < 2000; order++) {
+            orders.add(longest);
         }
+        return orders;
+    }
 
-        assertThatIllegalArgumentException().isThrownBy(() -> client().payments().submit(new PaymentBatch(orders)))
-                .withMessageStartingWith("A payment file is at most 2097152 bytes");
+    @Test
+    void should_reject_without_request_naming_both_sizes_when_submitted_given_orders_larger_than_fio_imports() {
+        PaymentBatch batch = new PaymentBatch(ordersLargerThanFioImports());
+
+        assertThatIllegalArgumentException().isThrownBy(() -> client().payments().submit(batch))
+                .withMessageMatching("The batch written as XML is \\d+ bytes, more than the 2097152 bytes the bank "
+                        + "imports; submit it in smaller batches");
         assertThat(server().requests()).isEmpty();
+    }
+
+    @Test
+    void should_refuse_as_state_without_request_and_keep_batch_open_when_submitted_given_orders_larger_than_fio_imports() {
+        FioClient.BatchRequest batch = client().payments().batch();
+        ordersLargerThanFioImports().forEach(batch::add);
+
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessageMatching("The batch written as XML is \\d+ bytes, more than the 2097152 bytes the bank "
+                        + "imports; submit it in smaller batches")
+                .withCauseInstanceOf(IllegalArgumentException.class);
+        assertThatCode(() -> batch.add(domestic())).doesNotThrowAnyException();
+        assertThat(server().requests()).isEmpty();
+    }
+
+    @Test
+    void should_refuse_as_state_without_request_when_submitted_given_orders_from_two_accounts() {
+        FioClient.BatchRequest batch = client().payments().batch()
+                .add(domestic())
+                .domestic(order -> order.from("2400222222/2010").to("19-2000145399/0800").amount(Money.czk("1")).date(DUE));
+
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
+                        + "1234562 and 2400222222/2010")
+                .withCauseInstanceOf(IllegalArgumentException.class);
+        assertThat(server().requests()).isEmpty();
+    }
+
+    static Stream<Arguments> additions() {
+        return Stream.of(
+                argumentSet("domestic", (Consumer<FioClient.BatchRequest>) batch -> batch.domestic(order -> order
+                        .from(PaymentSamples.PAYER).to("19-2000145399/0800").amount(Money.czk("1")).date(DUE))),
+                argumentSet("euro", (Consumer<FioClient.BatchRequest>) batch -> batch.euro(order -> order
+                        .from(PaymentSamples.PAYER).to("AT611904300234573201").amount(euro("1")).date(DUE).beneficiary("Hans"))),
+                argumentSet("foreign", (Consumer<FioClient.BatchRequest>) batch -> batch.foreign(order -> order
+                        .from(PaymentSamples.PAYER).to("PK36SCBL0000001123456702").bic("ALFHPKKAXXX")
+                        .amount(Money.of("1", "USD")).date(DUE)
+                        .beneficiary(new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK"))
+                        .remittanceInfo("Hotel").paymentReason("348"))),
+                argumentSet("ready order", (Consumer<FioClient.BatchRequest>) batch -> batch.add(domestic())));
+    }
+
+    @ParameterizedTest
+    @MethodSource("additions")
+    void should_refuse_the_order_without_another_request_when_added_given_submitted_batch(Consumer<FioClient.BatchRequest> addition) {
+        answer(200, Fixtures.read(Fixtures.IMPORT_ACCEPTED));
+        FioClient.BatchRequest batch = client().payments().batch().add(domestic());
+        batch.submit();
+
+        assertThatIllegalStateException().isThrownBy(() -> addition.accept(batch))
+                .withMessage("The batch was already submitted; build a new one to add orders");
+        assertThat(server().requests()).containsExactly(IMPORT_REQUEST);
     }
 
     @Test

@@ -122,18 +122,35 @@ ImportResult result = fio.payments().batch()
                 .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .variableSymbol("20260001")
                 .messageForRecipient("Invoice 2026-0001"))
-        .euro(payment -> payment
+        .domestic(payment -> payment
                 .from("2400222222/2010")
+                .to("2001234561/0100")
+                .amount(Money.czk("380.50"))
+                .date(LocalDate.now(ZoneId.of("Europe/Prague")))
+                .variableSymbol("20260002"))
+        .submit();
+
+if (!result.isAccepted()) {
+    result.messages().forEach(message -> System.err.println(message.text()));
+}
+```
+
+A token belongs to one account, and every order in a batch is from that account and in its currency; a batch
+with orders from two accounts is refused before anything is sent. From a euro account, with its own token, the
+same batch takes SEPA payments:
+
+```java
+FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_EUR_TOKEN")).build();
+
+ImportResult result = fio.payments().batch()
+        .euro(payment -> payment
+                .from("2400333333/2010")
                 .to("AT611904300234573201")
                 .bic("ABAGATWWXXX")
                 .amount(Money.of("99.90", "EUR"))
                 .date(LocalDate.now(ZoneId.of("Europe/Prague")))
                 .beneficiary(Beneficiary.named("Example GmbH")))
         .submit();
-
-if (!result.isAccepted()) {
-    result.messages().forEach(message -> System.err.println(message.text()));
-}
 ```
 
 A batch is built from `DomesticPayment`, `EuroPayment` (SEPA) and `ForeignPayment` orders, each with a builder
