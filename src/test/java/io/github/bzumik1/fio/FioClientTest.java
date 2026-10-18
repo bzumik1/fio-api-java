@@ -180,6 +180,21 @@ class FioClientTest {
     }
 
     @Test
+    void should_fail_first_and_fetch_on_the_same_request_after_the_slot_when_fetched_given_latest_and_fail_fast() {
+        server().route("lastStatement", 200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
+        server().route("transactions.json", 200, JSON, Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8));
+        FioClient.StatementRequest latest = bank.builder().rateLimit(RateLimit.failFast()).build().statements().latest();
+
+        FioRateLimitException refused = catchThrowableOfType(FioRateLimitException.class, latest::fetch);
+        bank.time().advance(Duration.between(bank.time().now(), refused.retryAfter()));
+        latest.fetch();
+
+        assertThat(refused.statusCode()).isEmpty();
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(
+                LAST_STATEMENT, "/v1/rest/by-id/" + SECRET + "/2026/10/transactions.json");
+    }
+
+    @Test
     void should_keep_message_and_body_short_when_id_asked_given_20_kib_page_instead_of_a_statement_number() {
         server().respondWith(200, "text/html", ("<html>" + "x".repeat(20 * 1024) + "</html>").getBytes(StandardCharsets.UTF_8));
 

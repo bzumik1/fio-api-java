@@ -162,6 +162,10 @@ public interface FioClient {
          * of {@link StatementRequest#statementId()}, {@link StatementRequest#fetch()} and
          * {@link StatementRequest#download(StatementFormat)} called on the returned request and kept there, so a
          * fetch or download costs two requests, 30 seconds apart, and keeping the request saves asking again.
+         * With {@link RateLimit#failFast()}, or a {@link RateLimit#waitUpTo(Duration) wait} under 30
+         * seconds, the first fetch or download on a fresh request therefore fails with
+         * {@link FioRateLimitException} once the number is known; call it again on the same request after
+         * {@link FioRateLimitException#retryAfter()}.
          *
          * @return the chosen download
          */
