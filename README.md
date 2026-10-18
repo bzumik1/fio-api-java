@@ -219,8 +219,8 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 
 - **One request per token per 30 seconds**, whatever the endpoint or format. The client keeps the interval between
   its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only when the
-  wait would exceed `RateLimit.maximumWait()` does the request fail with `FioRateLimitException`, whose
-  `retryAfter()` says when the next request may go.
+  next slot would come later than `RateLimit.maximumWait()` after the call started (its HTTP exchanges included)
+  does the request fail with `FioRateLimitException`, whose `retryAfter()` says when the next request may go.
 - **90 days of history.** Data older than 90 days (counted from today, Prague time), movements, statements and
   card transactions alike, is available only for 10 minutes after the account holder unlocks the full history for
   the token in internet banking. Without it the bank answers HTTP 422, which becomes `FioHistoryLockedException`.
