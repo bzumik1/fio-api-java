@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Import xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:noNamespaceSchemaLocation="http://www.fio.cz/schema/importIB.xsd">
+<Orders>
+<T2Transaction>
+<accountFrom>1234562</accountFrom>
+<currency>EUR</currency>
+<amount>100.00</amount>
+<accountTo>AT611904300234573201</accountTo>
+<ks>0558</ks>
+<vs>1234567890</vs>
+<ss>1234567890</ss>
+<bic>ABAGATWWXXX</bic>
+<date>2013-04-25</date>
+<comment>Erste Zahlung</comment>
+<benefName>Hans Gruber</benefName>
+<benefStreet>Gugitzgasse 2</benefStreet>
+<benefCity>Wien</benefCity>
+<benefCountry>AT</benefCountry>
+<remittanceInfo1></remittanceInfo1>
+<remittanceInfo2></remittanceInfo2>
+<remittanceInfo3></remittanceInfo3>
+<paymentType>431008</paymentType>
+</T2Transaction>
+</Orders>
+</Import>

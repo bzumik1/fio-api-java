@@ -1,0 +1,37 @@
+<MerchantStatement>
+    <Info>
+        <accountId>2111111111</accountId>
+        <bankId>2010</bankId>
+        <currency>CZK</currency>
+        <iban>CZ7920100000002111111111</iban>
+        <bic>FIOBCZPPXXX</bic>
+        <dateStart>2012-07-01</dateStart>
+        <dateEnd>2012-07-31</dateEnd>
+    </Info>
+    <TransactionList>
+        <Transaction>
+            <operationId>9277937165</operationId>
+            <orderId>8216165940</orderId>
+            <date>2012-07-19+02:00</date>
+            <amount>4700.0000</amount>
+            <note>Zaúčtování POS terminálů MasterCard, Operace ON-US</note>
+            <branchName>Pobocka 1</branchName>
+            <transactionId>28</transactionId>
+            <deviceId>00203O999999 1</deviceId>
+            <transactionDateTime>2012-07-16T11:28:12+02:00</transactionDateTime>
+            <autorizationNumber>997476</autorizationNumber>
+            <cardNumber>553937******9052</cardNumber>
+            <transactionAmount>200.0000</transactionAmount>
+            <transactionCurrency>CZK</transactionCurrency>
+            <type>ON_US</type>
+            <cardIssuer>MASTERCARD</cardIssuer>
+            <totalFees>0.0000</totalFees>
+            <fioFee>1.3</fioFee>
+            <interchangeFee>0.0000</interchangeFee>
+            <cardAsosiationFee>0.25</cardAsosiationFee>
+            <flexibleCommission>1.84</flexibleCommission>
+            <settlement>true</settlement>
+            <settlementDate>2012-07-19+02:00</settlementDate>
+        </Transaction>
+    </TransactionList >
+</MerchantStatement>

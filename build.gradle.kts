@@ -1,10 +1,10 @@
 plugins {
 	`java-library`
 	jacoco
+	alias(libs.plugins.mavenPublish)
 }
 
 group = "io.github.bzumik1"
-version = "0.1.0-SNAPSHOT"
 description = "Java client for the Fio banka REST API"
 
 java {
@@ -13,22 +13,99 @@ java {
 	}
 }
 
+val testJdk = providers.gradleProperty("testJdk").map(JavaLanguageVersion::of).orElse(JavaLanguageVersion.of(17))
+
 repositories {
 	mavenCentral()
 }
 
 dependencies {
-	implementation("tools.jackson.core:jackson-databind:3.1.2")
+	api(libs.jspecify)
+	implementation(libs.jackson.databind)
 
-	testImplementation(platform("org.junit:junit-bom:6.0.3"))
-	testImplementation("org.junit.jupiter:junit-jupiter")
-	testImplementation("org.assertj:assertj-core:3.27.7")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testImplementation(platform(libs.junit.bom))
+	testImplementation(libs.junit.jupiter)
+	testImplementation(libs.assertj)
+	testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+	options.encoding = "UTF-8"
+	options.compilerArgs.addAll(listOf("-Xlint:all,-module", "-Werror"))
+}
+
+tasks.withType<AbstractArchiveTask>().configureEach {
+	isPreserveFileTimestamps = false
+	isReproducibleFileOrder = true
+}
+
+tasks.withType<org.gradle.jvm.tasks.Jar>().configureEach {
+	from(layout.projectDirectory.file("LICENSE")) {
+		into("META-INF")
+	}
+}
+
+tasks.jar {
+	manifest {
+		attributes(
+			"Implementation-Title" to project.name,
+			"Implementation-Version" to project.version,
+			"Implementation-Vendor" to "Jakub Znamenáček",
+			"Implementation-URL" to "https://github.com/bzumik1/fio-api-java"
+		)
+	}
+}
+
+tasks.javadoc {
+	inputs.dir(layout.projectDirectory.dir("gradle/javadoc/jdk17")).withPathSensitivity(PathSensitivity.RELATIVE)
+	options.encoding = "UTF-8"
+	(options as StandardJavadocDocletOptions).apply {
+		addBooleanOption("Xdoclint:all", true)
+		addBooleanOption("Werror", true)
+		linksOffline(
+			"https://docs.oracle.com/en/java/javase/17/docs/api/",
+			layout.projectDirectory.dir("gradle/javadoc/jdk17").asFile.path
+		)
+	}
 }
 
 tasks.test {
 	useJUnitPlatform()
+	javaLauncher = javaToolchains.launcherFor {
+		languageVersion = testJdk
+	}
+	environment("FIO_API_TEST_TOKEN", "token-set-by-the-build-for-tests")
+	maxHeapSize = "1g"
+	testLogging {
+		events("failed", "skipped")
+		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+		showStackTraces = true
+	}
 	finalizedBy(tasks.jacocoTestReport)
+}
+
+val moduleSmoke by sourceSets.creating
+
+configurations.named(moduleSmoke.implementationConfigurationName) {
+	extendsFrom(configurations.named("api").get(), configurations.named("implementation").get())
+}
+
+dependencies {
+	moduleSmoke.implementationConfigurationName(files(tasks.jar))
+}
+
+val moduleSmokeTest by tasks.registering(JavaExec::class) {
+	group = "verification"
+	description = "Runs a consumer of the built jar on the module path"
+	classpath = moduleSmoke.runtimeClasspath
+	mainModule = "io.github.bzumik1.fio.smoke"
+	mainClass = "io.github.bzumik1.fio.smoke.ModuleSmoke"
+	val statement = layout.projectDirectory.file("src/test/resources/io/github/bzumik1/fio/periods-statement.json")
+	inputs.file(statement)
+	args(statement.asFile.path)
+	javaLauncher = javaToolchains.launcherFor {
+		languageVersion = testJdk
+	}
 }
 
 tasks.jacocoTestReport {
@@ -55,6 +132,45 @@ tasks.jacocoTestCoverageVerification {
 	}
 }
 
+tasks.assemble {
+	dependsOn(tasks.named("plainJavadocJar"))
+}
+
 tasks.check {
-	dependsOn(tasks.jacocoTestCoverageVerification)
+	dependsOn(tasks.jacocoTestCoverageVerification, moduleSmokeTest)
+}
+
+mavenPublishing {
+	publishToMavenCentral(automaticRelease = true)
+	signAllPublications()
+	coordinates(group.toString(), "fio-api", version.toString())
+	pom {
+		name = "fio-api"
+		description = project.description
+		url = "https://github.com/bzumik1/fio-api-java"
+		inceptionYear = "2026"
+		licenses {
+			license {
+				name = "MIT License"
+				url = "https://opensource.org/license/mit"
+				distribution = "repo"
+			}
+		}
+		developers {
+			developer {
+				id = "bzumik1"
+				name = "Jakub Znamenáček"
+				url = "https://github.com/bzumik1"
+			}
+		}
+		scm {
+			url = "https://github.com/bzumik1/fio-api-java"
+			connection = "scm:git:https://github.com/bzumik1/fio-api-java.git"
+			developerConnection = "scm:git:ssh://git@github.com/bzumik1/fio-api-java.git"
+		}
+		issueManagement {
+			system = "GitHub"
+			url = "https://github.com/bzumik1/fio-api-java/issues"
+		}
+	}
 }

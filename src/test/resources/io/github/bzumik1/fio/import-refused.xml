@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<responseImport xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.fio.cz/schema/responseImportIB.xsd">
+  <result>
+    <errorCode>1</errorCode>
+    <status>error</status>
+    <message>Nalezené chyby při kontrole příkazů</message>
+    <sums>
+      <sum id="CZK">
+        <sumCredit>0</sumCredit>
+        <sumDebet>350.50</sumDebet>
+      </sum>
+      <sum id="EUR">
+        <sumCredit>0</sumCredit>
+        <sumDebet>12.00</sumDebet>
+      </sum>
+    </sums>
+  </result>
+  <ordersDetails>
+    <detail id="1">
+      <messages>
+        <message status="ok" errorCode="0">OK</message>
+      </messages>
+    </detail>
+    <detail id="2">
+      <messages>
+        <message status="error" errorCode="1087">Neplatný kód banky příjemce.</message>
+        <message status="warning" errorCode="1110">Měna platby neodpovídá měně účtu.</message>
+      </messages>
+    </detail>
+  </ordersDetails>
+</responseImport>

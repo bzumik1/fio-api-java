@@ -1,92 +1,50 @@
 package io.github.bzumik1.fio;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
-import java.io.IOException;
-import java.net.Authenticator;
-import java.net.CookieHandler;
-import java.net.ProxySelector;
+import org.jspecify.annotations.Nullable;
+
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
-final class FailingHttpClient extends HttpClient {
+final class FailingHttpClient extends HttpClientDouble {
 
     private final Exception failure;
+    private final boolean throwsWhenSending;
+    private final @Nullable HttpClient afterTheFirstFailure;
+    private final AtomicInteger attempts = new AtomicInteger();
 
-    FailingHttpClient(Exception failure) {
+    private FailingHttpClient(Exception failure, boolean throwsWhenSending, @Nullable HttpClient afterTheFirstFailure) {
         this.failure = failure;
+        this.throwsWhenSending = throwsWhenSending;
+        this.afterTheFirstFailure = afterTheFirstFailure;
     }
 
-    @Override
-    public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
-            throws IOException, InterruptedException {
-        if (failure instanceof IOException io) {
-            throw io;
-        }
-        if (failure instanceof InterruptedException interrupted) {
-            throw interrupted;
-        }
-        throw new IllegalStateException(failure);
+    static FailingHttpClient failingWith(Exception failure) {
+        return new FailingHttpClient(failure, false, null);
+    }
+
+    static FailingHttpClient throwingWhenSending(RuntimeException failure) {
+        return new FailingHttpClient(failure, true, null);
+    }
+
+    static FailingHttpClient failingOnceWith(Exception failure, HttpClient afterwards) {
+        return new FailingHttpClient(failure, false, afterwards);
+    }
+
+    int attempts() {
+        return attempts.get();
     }
 
     @Override
     public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
+        if (attempts.getAndIncrement() > 0 && afterTheFirstFailure != null) {
+            return afterTheFirstFailure.sendAsync(request, handler);
+        }
+        if (throwsWhenSending) {
+            throw (RuntimeException) failure;
+        }
         return CompletableFuture.failedFuture(failure);
-    }
-
-    @Override
-    public <T> CompletableFuture<HttpResponse<T>> sendAsync(
-            HttpRequest request, HttpResponse.BodyHandler<T> handler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
-        return CompletableFuture.failedFuture(failure);
-    }
-
-    @Override
-    public Optional<CookieHandler> cookieHandler() {
-        return Optional.empty();
-    }
-
-    @Override
-    public Optional<Duration> connectTimeout() {
-        return Optional.empty();
-    }
-
-    @Override
-    public Redirect followRedirects() {
-        return Redirect.NEVER;
-    }
-
-    @Override
-    public Optional<ProxySelector> proxy() {
-        return Optional.empty();
-    }
-
-    @Override
-    public SSLContext sslContext() {
-        return null;
-    }
-
-    @Override
-    public SSLParameters sslParameters() {
-        return new SSLParameters();
-    }
-
-    @Override
-    public Optional<Authenticator> authenticator() {
-        return Optional.empty();
-    }
-
-    @Override
-    public Version version() {
-        return Version.HTTP_1_1;
-    }
-
-    @Override
-    public Optional<Executor> executor() {
-        return Optional.empty();
     }
 }
