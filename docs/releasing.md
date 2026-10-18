@@ -69,7 +69,7 @@ These are set once by the owner in the repository's Settings on GitHub; the work
   | `MAVEN_CENTRAL_USERNAME` | the token username from step 2 |
   | `MAVEN_CENTRAL_PASSWORD` | the token password from step 2 |
   | `SIGNING_KEY` | the ASCII-armoured secret key from step 3 |
-  | `SIGNING_KEY_PASSWORD` | the passphrase of that key |
+  | `SIGNING_KEY_PASSWORD` | the passphrase of that key; a key without one needs no such secret |
 
   The workflow hands them to the build as `ORG_GRADLE_PROJECT_mavenCentralUsername`,
   `ORG_GRADLE_PROJECT_mavenCentralPassword`, `ORG_GRADLE_PROJECT_signingInMemoryKey` and
