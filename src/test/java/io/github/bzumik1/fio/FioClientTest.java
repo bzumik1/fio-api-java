@@ -454,6 +454,28 @@ class FioClientTest {
     }
 
     @Test
+    void should_fail_without_reading_the_body_when_downloading_given_content_length_over_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringWithContentLength(200, 1025, new byte[10]);
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 1024 bytes");
+        assertThat(http.deliveredBytes()).isZero();
+    }
+
+    @Test
+    void should_read_the_whole_answer_when_downloading_given_content_length_at_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringWithContentLength(200, 1024, new byte[1024]);
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        Download pdf = limited.statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf.content()).hasSize(1024);
+    }
+
+    @Test
     void should_reject_when_maximum_response_size_set_given_size_not_positive() {
         assertThatThrownBy(() -> bank.builder().maximumResponseSize(0))
                 .isInstanceOf(IllegalArgumentException.class)

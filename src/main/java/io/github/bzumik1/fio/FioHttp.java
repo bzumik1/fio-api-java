@@ -135,7 +135,8 @@ final class FioHttp {
 
     private CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
         try {
-            return httpClient.sendAsync(request, info -> new BoundedBody(responseSizeLimit));
+            return httpClient.sendAsync(request, info -> new BoundedBody(
+                    responseSizeLimit, info.headers().firstValueAsLong("Content-Length").orElse(0)));
         } catch (RuntimeException e) {
             throw failed(request, e);
         }
@@ -219,11 +220,13 @@ final class FioHttp {
 
         private final HttpResponse.BodySubscriber<byte[]> collector = HttpResponse.BodySubscribers.ofByteArray();
         private final int limit;
+        private final long declaredLength;
         private long received;
         private Flow.@Nullable Subscription subscription;
 
-        private BoundedBody(int limit) {
+        private BoundedBody(int limit, long declaredLength) {
             this.limit = limit;
+            this.declaredLength = declaredLength;
         }
 
         @Override
@@ -235,6 +238,10 @@ final class FioHttp {
         public void onSubscribe(Flow.Subscription subscription) {
             this.subscription = subscription;
             collector.onSubscribe(subscription);
+            if (declaredLength > limit) {
+                subscription.cancel();
+                collector.onError(new ResponseTooLargeException(limit));
+            }
         }
 
         @Override
