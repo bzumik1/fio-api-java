@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.bzumik1.fio.PaymentText.optional;
+import static io.github.bzumik1.fio.PaymentText.payerAccount;
 import static io.github.bzumik1.fio.PaymentText.positive;
 import static io.github.bzumik1.fio.PaymentText.required;
 import static java.util.Objects.requireNonNull;
@@ -52,13 +53,14 @@ public record ForeignPayment(
      * @param remittanceInfo the lines for the recipient
      * @param charges who pays the fees
      * @param paymentReason the payment reason
-     * @throws IllegalArgumentException when the amount is not positive, the BIC is malformed, a text is too long,
+     * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
+     *         or has more than two decimal places, the BIC is malformed, a text is too long or blank,
      *         the beneficiary's address is incomplete, there is no remittance line or more than four, or the
      *         payment reason is not three digits
      */
     public ForeignPayment {
-        requireNonNull(from, "from");
-        toAccount = required(toAccount, 34, "recipient's account").replace(" ", "");
+        from = payerAccount(from);
+        toAccount = required(requireNonNull(toAccount, "toAccount").replace(" ", ""), 34, "recipient's account");
         bic = PaymentText.bic(bic);
         amount = positive(amount);
         requireNonNull(date, "date");

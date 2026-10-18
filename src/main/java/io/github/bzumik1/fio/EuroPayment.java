@@ -9,6 +9,7 @@ import java.util.List;
 import static io.github.bzumik1.fio.PaymentText.digits;
 import static io.github.bzumik1.fio.PaymentText.iban;
 import static io.github.bzumik1.fio.PaymentText.optional;
+import static io.github.bzumik1.fio.PaymentText.payerAccount;
 import static io.github.bzumik1.fio.PaymentText.positive;
 import static io.github.bzumik1.fio.PaymentText.required;
 import static java.util.Objects.requireNonNull;
@@ -57,11 +58,12 @@ public record EuroPayment(
      * @param remittanceInfo the lines for the recipient
      * @param paymentReason the payment reason
      * @param type the type
-     * @throws IllegalArgumentException when the amount is not positive euro, the IBAN or BIC is malformed, a
-     *         text is too long or there are more than three remittance lines
+     * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
+     *         euro with at most two decimal places, the IBAN or BIC is malformed, a text is too long or blank, there
+     *         are more than three remittance lines or the payment reason is not three digits
      */
     public EuroPayment {
-        requireNonNull(from, "from");
+        from = payerAccount(from);
         toIban = iban(toIban);
         bic = bic == null ? null : PaymentText.bic(bic);
         amount = positive(amount);

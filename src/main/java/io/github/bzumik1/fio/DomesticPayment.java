@@ -6,6 +6,7 @@ import java.time.LocalDate;
 
 import static io.github.bzumik1.fio.PaymentText.digits;
 import static io.github.bzumik1.fio.PaymentText.optional;
+import static io.github.bzumik1.fio.PaymentText.payerAccount;
 import static io.github.bzumik1.fio.PaymentText.positive;
 import static io.github.bzumik1.fio.PaymentText.required;
 import static java.util.Objects.requireNonNull;
@@ -19,7 +20,7 @@ import static java.util.Objects.requireNonNull;
  * @param symbols the variable, constant and specific symbols
  * @param date the day the payment is due
  * @param messageForRecipient the message the recipient sees, up to 140 characters
- * @param comment the payer's own label, up to 255 characters
+ * @param comment the payer's own label, up to 140 characters
  * @param paymentReason the three-digit payment reason code, needed only for some foreign-currency transfers
  * @param type standard, priority, or a direct debit order
  */
@@ -46,11 +47,12 @@ public record DomesticPayment(
      * @param comment the comment
      * @param paymentReason the payment reason
      * @param type the type
-     * @throws IllegalArgumentException when the amount is not positive, the recipient's account has no bank code,
-     *         a text is too long or the payment reason is not three digits
+     * @throws IllegalArgumentException when the payer's account is not a Fio account, the amount is not positive
+     *         or has more than two decimal places, the recipient's account has no bank code, a text is too long or
+     *         the payment reason is not three digits
      */
     public DomesticPayment {
-        requireNonNull(from, "from");
+        from = payerAccount(from);
         requireNonNull(to, "to");
         if (to.bankCode() == null) {
             throw new IllegalArgumentException("The recipient's account needs a bank code: " + to);
@@ -59,7 +61,7 @@ public record DomesticPayment(
         requireNonNull(symbols, "symbols");
         requireNonNull(date, "date");
         messageForRecipient = optional(messageForRecipient, 140, "message for the recipient");
-        comment = optional(comment, 255, "comment");
+        comment = optional(comment, 140, "comment");
         paymentReason = digits(paymentReason, 3, "payment reason");
         requireNonNull(type, "type");
     }
@@ -233,7 +235,7 @@ public record DomesticPayment(
         /**
          * Sets the payer's own label of the payment.
          *
-         * @param comment up to 255 characters
+         * @param comment up to 140 characters
          * @return this builder
          */
         public Builder comment(String comment) {
