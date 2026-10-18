@@ -22,13 +22,15 @@ All notable changes to this library are recorded here. The format follows
 - A rate limiter that keeps the 30 seconds between requests the bank demands, shared by every thread using a
   client, and a bounded wait with a `FioRateLimitException` when the slot would come too late.
 - Exceptions that tell what happened: authorisation, rate limit, locked history (with the earliest available day
-  when the bank names it), too many transactions, malformed response, an answer too large to read and transport
-  (with whether the request may have reached the bank, which a failed TLS handshake certainly did not), each
-  with `mayHaveTakenEffect()`, which says whether a submitted batch may have been accepted or the bookmark
-  moved. The token never appears in any of them, nor do 12 or more of its first characters where a message
-  cuts it short; a response body is kept to its first 16 Ki characters and a value quoted from it to its first
-  200.
-- Payment batches are checked before sending: one account, one currency, at most 2 MiB of Fio XML.
+  when the bank names it), too many transactions, malformed response, an answer too large to read
+  (`FioResponseTooLargeException`) and transport (with whether the request may have reached the bank, which a
+  failed TLS handshake certainly did not), each with `mayHaveTakenEffect()`, which says whether a submitted
+  batch may have been accepted or the bookmark moved. The token never appears in any of them, nor do 12 or more
+  of its first characters where a message cuts it short; a response body is kept to its first 16 Ki characters
+  and a value quoted from it to its first 200.
+- Payment batches are checked before sending: one account, one currency, at most 2 MiB of Fio XML. A batch
+  request is spent by a submission that may have reached the bank, so it cannot pay twice, and stays open after
+  one that never left the client.
 - Bounded response numbers: a decimal the bank sends has at most 40 digits before the point and 1000 after it,
   so a hostile answer cannot make the client build a huge `BigDecimal`.
 - Safety against a misbehaving network: an answer longer than 256 MiB (the builder's `maximumResponseSize`) is
