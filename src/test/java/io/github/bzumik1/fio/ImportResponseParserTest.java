@@ -247,7 +247,7 @@ class ImportResponseParserTest {
 
     @ParameterizedTest
     @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
-    void should_reject_without_building_the_number_when_parsed_given_sum_with_too_many_digits(String text) {
+    void should_reject_when_parsed_given_sum_with_too_many_digits(String text) {
         String body = response("<errorCode>0</errorCode><status>ok</status><sums><sum id=\"CZK\"><sumDebet>" + text
                 + "</sumDebet></sum></sums>");
 
