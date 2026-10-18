@@ -6,9 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
+import static io.github.bzumik1.fio.PaymentSamples.domesticInEuro;
 import static io.github.bzumik1.fio.PaymentSamples.domesticBuilder;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
-import static io.github.bzumik1.fio.PaymentSamples.foreign;
+import static io.github.bzumik1.fio.PaymentSamples.foreignBuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
@@ -17,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PaymentBatchTest {
 
     @Test
-    void should_keep_orders_in_sequence_added_when_created_given_mixed_orders() {
-        ForeignPayment foreign = foreign();
-        DomesticPayment domestic = domestic();
+    void should_keep_orders_in_sequence_added_when_created_given_every_kind_of_order_in_euro() {
+        ForeignPayment foreign = foreignBuilder().amount(Money.of("100.00", "EUR")).build();
+        DomesticPayment domestic = domesticInEuro();
         EuroPayment euro = euro();
 
         assertThat(PaymentBatch.of(foreign, domestic, euro).orders()).containsExactly(foreign, domestic, euro);
@@ -69,7 +70,7 @@ class PaymentBatchTest {
     void should_reject_naming_both_accounts_when_created_given_orders_from_two_accounts() {
         DomesticPayment fromAnotherAccount = domesticBuilder().from("2400222222/2010").build();
 
-        assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), euro(), fromAnotherAccount))
+        assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), domestic(), fromAnotherAccount))
                 .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
                         + "1234562 and 2400222222/2010");
     }
@@ -79,5 +80,11 @@ class PaymentBatchTest {
         DomesticPayment withBankCode = domesticBuilder().from("1234562/2010").build();
 
         assertThat(PaymentBatch.of(domestic(), withBankCode).orders()).containsExactly(domestic(), withBankCode);
+    }
+
+    @Test
+    void should_reject_naming_both_currencies_when_created_given_orders_in_two_currencies() {
+        assertThatIllegalArgumentException().isThrownBy(() -> PaymentBatch.of(domestic(), domestic(), euro()))
+                .withMessage("Every order in a batch is in the account's currency: CZK and EUR");
     }
 }

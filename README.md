@@ -142,7 +142,7 @@ if (!result.isAccepted()) {
 ```
 
 A token belongs to one account, and every order in a batch is from that account and in its currency; a batch
-with orders from two accounts is refused before anything is sent. From a euro account, with its own token, the
+with orders from two accounts, or in two currencies, is refused before anything is sent. From a euro account, with its own token, the
 same batch takes SEPA payments:
 
 ```java

@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 
 import static io.github.bzumik1.fio.PaymentSamples.DUE;
 import static io.github.bzumik1.fio.PaymentSamples.domestic;
+import static io.github.bzumik1.fio.PaymentSamples.domesticInEuro;
 import static io.github.bzumik1.fio.PaymentSamples.euro;
 import static io.github.bzumik1.fio.StubBank.NOW;
 import static io.github.bzumik1.fio.StubBank.SECRET;
@@ -60,6 +61,8 @@ class HttpPaymentsTest {
             + "<benefCity>Karachi</benefCity><benefCountry>PK</benefCountry>"
             + "<remittanceInfo1>Payment for hotel 032013</remittanceInfo1><detailsOfCharges>470503</detailsOfCharges>"
             + "<paymentReason>348</paymentReason></ForeignTransaction>";
+    private static final String MINIMAL_DOMESTIC_IN_EURO = MINIMAL_DOMESTIC.replace("<currency>CZK</currency>", "<currency>EUR</currency>");
+    private static final String MINIMAL_FOREIGN_IN_EURO = MINIMAL_FOREIGN.replace("<currency>USD</currency>", "<currency>EUR</currency>");
     private static final ImportResult ACCEPTED = new ImportResult(0, Status.OK, 105699806L,
             List.of(new Sum("CZK", new BigDecimal("100.00"), new BigDecimal("0"))), List.of(new Message(1, Status.OK, "OK")));
 
@@ -210,12 +213,12 @@ class HttpPaymentsTest {
                         .from("1234562")
                         .to("PK36SCBL0000001123456702")
                         .bic("ALFHPKKAXXX")
-                        .amount(Money.of("100", "USD"))
+                        .amount(Money.of("100", "EUR"))
                         .date(DUE)
                         .beneficiary(new Beneficiary("Amir Khan", "Nishtar Rd 13", "Karachi", "PK"))
                         .remittanceInfo("Payment for hotel 032013")
                         .paymentReason("348"))
-                .add(domestic())
+                .add(domesticInEuro())
                 .euro(order -> order
                         .from("1234562")
                         .to("AT611904300234573201")
@@ -224,7 +227,8 @@ class HttpPaymentsTest {
                         .beneficiary("Hans Gruber"))
                 .submit();
 
-        assertThat(fileOf(server().bodies().get(0))).isEqualTo(FILE_START + MINIMAL_DOMESTIC + MINIMAL_EURO + MINIMAL_FOREIGN + FILE_END);
+        assertThat(fileOf(server().bodies().get(0)))
+                .isEqualTo(FILE_START + MINIMAL_DOMESTIC_IN_EURO + MINIMAL_EURO + MINIMAL_FOREIGN_IN_EURO + FILE_END);
         assertThat(result).isEqualTo(new ImportResult(0, Status.OK, 9L, List.of(), List.of(
                 new Message(null, null, "Dávka přijata"),
                 new Message(2, Status.OK, "tuzemská"),
@@ -236,7 +240,7 @@ class HttpPaymentsTest {
     void should_number_the_last_order_when_submitted_given_detail_id_equal_to_the_batch_size() {
         answer(200, details(detail(2, "druhá v souboru")));
 
-        ImportResult result = client().payments().batch().add(euro()).add(domestic()).submit();
+        ImportResult result = client().payments().batch().add(euro()).add(domesticInEuro()).submit();
 
         assertThat(result.messages()).containsExactly(
                 new Message(null, null, "Dávka přijata"), new Message(1, Status.OK, "druhá v souboru"));
@@ -246,7 +250,7 @@ class HttpPaymentsTest {
     void should_leave_every_order_number_empty_when_submitted_given_detail_id_beyond_the_batch_size() {
         answer(200, details(detail(1, "první"), detail(3, "mimo dávku")));
 
-        ImportResult result = client().payments().batch().add(domestic()).add(euro()).submit();
+        ImportResult result = client().payments().batch().add(domesticInEuro()).add(euro()).submit();
 
         assertThat(result.messages()).containsExactly(
                 new Message(null, null, "Dávka přijata"),
@@ -268,7 +272,7 @@ class HttpPaymentsTest {
         answer(200, details("<detail><messages><message status=\"warning\">bez čísla</message></messages></detail>",
                 detail(1, "první")));
 
-        ImportResult result = client().payments().batch().add(euro()).add(domestic()).submit();
+        ImportResult result = client().payments().batch().add(euro()).add(domesticInEuro()).submit();
 
         assertThat(result.messages()).containsExactly(
                 new Message(null, null, "Dávka přijata"),
@@ -302,7 +306,7 @@ class HttpPaymentsTest {
     void should_leave_every_order_number_empty_when_submitted_given_detail_id_outside_the_batch() {
         answer(200, details(detail(1, "tuzemská"), detail(0, "bez pořadí"), detail(3, "mimo dávku")));
 
-        ImportResult result = client().payments().batch().add(domestic()).add(euro()).submit();
+        ImportResult result = client().payments().batch().add(domesticInEuro()).add(euro()).submit();
 
         assertThat(result.messages()).extracting(Message::orderNumber).containsOnlyNulls();
         assertThat(result.messages()).extracting(Message::text)
@@ -313,9 +317,9 @@ class HttpPaymentsTest {
     void should_submit_ready_batch_when_submitted_given_payment_batch() {
         answer(200, details(detail(1, "první"), detail(2, "druhá")));
 
-        ImportResult result = client().payments().submit(PaymentBatch.of(euro(), domestic()));
+        ImportResult result = client().payments().submit(PaymentBatch.of(euro(), domesticInEuro()));
 
-        assertThat(fileOf(server().bodies().get(0))).isEqualTo(FILE_START + MINIMAL_DOMESTIC + MINIMAL_EURO + FILE_END);
+        assertThat(fileOf(server().bodies().get(0))).isEqualTo(FILE_START + MINIMAL_DOMESTIC_IN_EURO + MINIMAL_EURO + FILE_END);
         assertThat(result.messages()).extracting(Message::orderNumber).containsExactly(null, 2, 1);
     }
 
@@ -496,6 +500,16 @@ class HttpPaymentsTest {
         assertThatIllegalStateException().isThrownBy(batch::submit)
                 .withMessage("Every order in a batch is for the same account, the one the token belongs to: "
                         + "1234562 and 2400222222/2010")
+                .withCauseInstanceOf(IllegalArgumentException.class);
+        assertThat(server().requests()).isEmpty();
+    }
+
+    @Test
+    void should_refuse_as_state_without_request_when_submitted_given_orders_in_two_currencies() {
+        FioClient.BatchRequest batch = client().payments().batch().add(domestic()).add(euro());
+
+        assertThatIllegalStateException().isThrownBy(batch::submit)
+                .withMessage("Every order in a batch is in the account's currency: CZK and EUR")
                 .withCauseInstanceOf(IllegalArgumentException.class);
         assertThat(server().requests()).isEmpty();
     }

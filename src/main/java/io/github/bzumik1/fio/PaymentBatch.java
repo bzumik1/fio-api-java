@@ -10,9 +10,10 @@ import static java.util.Objects.requireNonNull;
  * keeps them in the sequence they were added and the client reorders them when it writes the file.
  *
  * <p>A token belongs to one account, so every order in a batch is {@linkplain PaymentOrder#from() from} that
- * account, and in its currency.
+ * account, and in its currency: a batch with orders from two accounts, or in two currencies, is refused before
+ * anything is sent. Euro payments therefore go in a batch of their own, submitted with the euro account's token.
  *
- * @param orders the orders, at least one, all from the same account
+ * @param orders the orders, at least one, all from the same account and in the same currency
  */
 public record PaymentBatch(List<PaymentOrder> orders) {
 
@@ -20,7 +21,8 @@ public record PaymentBatch(List<PaymentOrder> orders) {
      * Validates and copies the orders.
      *
      * @param orders the orders
-     * @throws IllegalArgumentException when there are no orders, or they are not all from the same account
+     * @throws IllegalArgumentException when there are no orders, or they are not all from the same account and in
+     *         the same currency
      */
     public PaymentBatch {
         requireNonNull(orders, "orders");
@@ -33,11 +35,15 @@ public record PaymentBatch(List<PaymentOrder> orders) {
         if (orders.isEmpty()) {
             throw new IllegalArgumentException("A batch holds at least one payment order");
         }
-        DomesticAccount account = orders.get(0).from();
+        PaymentOrder first = orders.get(0);
         for (PaymentOrder order : orders) {
-            if (!order.from().number().equals(account.number())) {
+            if (!order.from().number().equals(first.from().number())) {
                 throw new IllegalArgumentException("Every order in a batch is for the same account, the one the token "
-                        + "belongs to: " + account + " and " + order.from());
+                        + "belongs to: " + first.from() + " and " + order.from());
+            }
+            if (!order.amount().currency().equals(first.amount().currency())) {
+                throw new IllegalArgumentException("Every order in a batch is in the account's currency: "
+                        + first.amount().currency() + " and " + order.amount().currency());
             }
         }
     }
@@ -45,9 +51,10 @@ public record PaymentBatch(List<PaymentOrder> orders) {
     /**
      * Creates a batch of the given orders.
      *
-     * @param orders the orders, at least one, all from the same account
+     * @param orders the orders, at least one, all from the same account and in the same currency
      * @return the batch
-     * @throws IllegalArgumentException when there are no orders, or they are not all from the same account
+     * @throws IllegalArgumentException when there are no orders, or they are not all from the same account and in
+     *         the same currency
      */
     public static PaymentBatch of(PaymentOrder... orders) {
         return new PaymentBatch(Arrays.asList(requireNonNull(orders, "orders")));

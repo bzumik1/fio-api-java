@@ -398,10 +398,10 @@ public interface FioClient {
          *         answers in a way this client cannot read; when its {@link FioException#mayHaveTakenEffect()} is
          *         {@code true}, check the pending batches in Fio internet banking before submitting again
          * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
-         *         one the token belongs to), the batch written as Fio XML is larger than
-         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the first three are an
-         *         {@link IllegalArgumentException} from {@link PaymentBatch} and {@link Payments#submit(PaymentBatch)},
-         *         where the batch is an argument
+         *         one the token belongs to) and in the same currency, the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the account, currency and size
+         *         checks are an {@link IllegalArgumentException} from {@link PaymentBatch} and
+         *         {@link Payments#submit(PaymentBatch)}, where the batch is an argument
          */
         ImportResult submit();
     }
