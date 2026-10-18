@@ -116,6 +116,10 @@ public sealed class FioException extends RuntimeException
      * client did not send. When it is {@code true}, check the pending batches in Fio internet banking, or move the
      * bookmark back, before trying again.
      *
+     * <p>It does not look at what the request was. A download by period or by statement number changes nothing on
+     * the bank's side and can be repeated whatever this returns; the answer matters after
+     * {@link FioClient.Transactions#sinceBookmark()} and after a payment submission.
+     *
      * @return whether the request may have taken effect
      */
     public boolean mayHaveTakenEffect() {
