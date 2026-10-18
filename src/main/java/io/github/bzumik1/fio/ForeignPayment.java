@@ -88,6 +88,9 @@ public record ForeignPayment(
 
     /**
      * Who pays the fees of a payment abroad, as in SWIFT's details of charges.
+     *
+     * <p>Constants may be added in a minor release when Fio imports a new option, so a {@code switch} over this
+     * type needs a {@code default} branch.
      */
     public enum Charges {
 

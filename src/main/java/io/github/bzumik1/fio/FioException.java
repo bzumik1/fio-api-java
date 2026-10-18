@@ -11,6 +11,10 @@ import java.util.OptionalInt;
  * A request to the Fio API failed. The subclasses name the documented refusals, an answer the client does not
  * understand and a request that got no answer; this class itself is thrown for any other HTTP status.
  *
+ * <p>This class itself is also thrown, without a status, for an answer longer than the client reads (64 MiB).
+ * Like {@link FioMalformedResponseException}, it comes after the bank received the request: a submitted batch may
+ * have been accepted, and {@link FioClient.Transactions#sinceBookmark()} may have moved the bookmark.
+ *
  * <p>The hierarchy is sealed, so a {@code switch} over it can be exhaustive. Every message and body has the token
  * masked, and a body is cut to its first {@value #RESPONSE_BODY_LIMIT} characters. The status and the body are
  * {@link OptionalInt} and {@link Optional} rather than nullable, as an exception is read far from where it is

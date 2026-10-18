@@ -82,6 +82,9 @@ public record DomesticPayment(
 
     /**
      * The kind of domestic order, which Fio calls the payment type.
+     *
+     * <p>Fio's list of payment types changes (it has dropped one and added instant payments before), so constants
+     * may be added in a minor release and a {@code switch} over this type needs a {@code default} branch.
      */
     public enum Type {
 

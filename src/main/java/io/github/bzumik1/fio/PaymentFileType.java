@@ -2,6 +2,9 @@ package io.github.bzumik1.fio;
 
 /**
  * The formats of payment orders Fio imports.
+ *
+ * <p>Constants may be added in a minor release when Fio imports a new format, so a {@code switch} over this type
+ * needs a {@code default} branch.
  */
 public enum PaymentFileType {
 

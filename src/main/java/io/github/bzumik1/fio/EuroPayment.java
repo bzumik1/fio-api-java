@@ -104,6 +104,9 @@ public record EuroPayment(
 
     /**
      * The kind of SEPA order, which Fio calls the payment type.
+     *
+     * <p>Fio's list of payment types changes, so constants may be added in a minor release and a {@code switch}
+     * over this type needs a {@code default} branch.
      */
     public enum Type {
 
