@@ -166,8 +166,9 @@ endpoint. `upload(PaymentFile)` posts a ready file in any format the bank import
 pain.008).
 
 A submitted batch is only accepted: the bank processes it once an authorised person confirms it in internet
-banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the batch
-id, the sums per currency, and a message per rejected order. A batch the bank checked and refused comes back as a
+banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the
+`batchId` the bank gave the batch (not the `instructionId` of a single movement), the sums per currency, and a
+message per rejected order. A batch the bank checked and refused comes back as a
 result whose `isAccepted()` is false, not as an exception.
 
 When a submission fails with `FioTransportException`, read `mayHaveReachedTheBank()` before trying again: a

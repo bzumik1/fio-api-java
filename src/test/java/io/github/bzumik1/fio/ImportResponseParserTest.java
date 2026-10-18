@@ -97,7 +97,7 @@ class ImportResponseParserTest {
         ImportResult result = parser.parse(response(
                 "<errorCode>0</errorCode><idInstruction>7</idInstruction><idInstruction>8</idInstruction><status>ok</status>"));
 
-        assertThat(result.instructionId()).isEqualTo(7L);
+        assertThat(result.batchId()).isEqualTo(7L);
     }
 
     @Test

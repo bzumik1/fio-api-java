@@ -33,6 +33,7 @@ class ImportResultTest {
         messages.clear();
 
         assertThat(result)
+                .returns(42L, ImportResult::batchId)
                 .returns(List.of(new Sum("CZK", BigDecimal.TEN, null)), ImportResult::sums)
                 .returns(List.of(new Message(1, Status.OK, "OK")), ImportResult::messages);
     }

@@ -51,7 +51,7 @@ final class HttpPayments implements FioClient.Payments {
         return new ImportResult(
                 result.errorCode(),
                 result.status(),
-                result.instructionId(),
+                result.batchId(),
                 result.sums(),
                 numberedInBatch(result.messages(), fileOrder));
     }

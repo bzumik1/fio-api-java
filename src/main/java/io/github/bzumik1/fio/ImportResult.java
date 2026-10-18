@@ -14,14 +14,14 @@ import static java.util.Objects.requireNonNull;
  * @param errorCode 0 when the batch was accepted, 2 when accepted with warnings, else the code Fio's documentation
  *        lists
  * @param status whether the batch was accepted, accepted with warnings, or refused
- * @param instructionId the id of the batch in the bank, when it was accepted
+ * @param batchId the id the bank gave the batch (číslo dávky), when it was accepted
  * @param sums the sums of the orders, one for each currency of the batch
  * @param messages what the bank said about the batch and its orders, in the language chosen for the client
  */
 public record ImportResult(
         int errorCode,
         Status status,
-        @Nullable Long instructionId,
+        @Nullable Long batchId,
         List<Sum> sums,
         List<Message> messages) {
 
@@ -30,7 +30,7 @@ public record ImportResult(
      *
      * @param errorCode the error code
      * @param status the status
-     * @param instructionId the batch id
+     * @param batchId the batch id
      * @param sums the sums
      * @param messages the messages
      */
