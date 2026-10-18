@@ -9,11 +9,9 @@ import java.io.Serial;
  * JSON, XML or statement number, or a value in it that does not fit. The cause names what did not fit, and
  * {@link #responseBody()} holds the beginning of the body, so the answer can be reported.
  *
- * <p>The bank acted on the request before it answered. A download by period or number can simply be asked again,
- * and most likely gets the same answer. After {@link FioClient.Transactions#sinceBookmark()} the bank may have
- * moved the bookmark past the movements of the unreadable answer, so move the bookmark back to the last stored
- * movement and download them again. After a payment submission the bank received the batch and may have accepted
- * it, so check the pending batches in Fio internet banking before submitting it again.
+ * <p>The bank acted on the request before it answered, so {@link #mayHaveTakenEffect()} is {@code true}: check
+ * the pending batches in Fio internet banking, or move the bookmark back, before trying again. A download by period
+ * or number can simply be asked again, and most likely gets the same answer.
  */
 public final class FioMalformedResponseException extends FioException {
 
@@ -30,5 +28,15 @@ public final class FioMalformedResponseException extends FioException {
      */
     public FioMalformedResponseException(String message, int statusCode, @Nullable String responseBody, @Nullable Throwable cause) {
         super(message, statusCode, responseBody, cause);
+    }
+
+    /**
+     * Returns {@code true}: the bank received the request and answered.
+     *
+     * @return {@code true}
+     */
+    @Override
+    public boolean mayHaveTakenEffect() {
+        return true;
     }
 }

@@ -30,7 +30,9 @@ import static java.util.Objects.requireNonNull;
  * @param detail the detail (column 18)
  * @param comment the comment (column 25)
  * @param payerReference the payer's reference (column 27)
- * @param columns every column the bank sent, by its id
+ * @param columns every column the bank sent, keyed by its id and in ascending order of the keys; a parsed
+ *        movement has no {@code null} value and every key equals its column's {@link TransactionColumn#id()}, while
+ *        the constructor takes the map as given apart from refusing a {@code null} key
  */
 public record Transaction(
         long id,
@@ -66,7 +68,8 @@ public record Transaction(
      * @param detail the detail
      * @param comment the comment
      * @param payerReference the payer's reference
-     * @param columns the raw columns
+     * @param columns the raw columns, copied in ascending order of the keys
+     * @throws NullPointerException when a mandatory component or a key of the columns is {@code null}
      */
     public Transaction {
         requireNonNull(date, "date");

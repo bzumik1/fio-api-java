@@ -55,6 +55,11 @@ public record StatementId(int year, int number) implements Comparable<StatementI
         return year != other.year ? Integer.compare(year, other.year) : Integer.compare(number, other.number);
     }
 
+    /**
+     * Returns the year and number for display, such as {@code 2026/10}; it is not a form this library reads back.
+     *
+     * @return the year and number
+     */
     @Override
     public String toString() {
         return year + "/" + number;

@@ -14,24 +14,36 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 final class RecordingHttpClient extends HttpClientDouble {
 
     private final List<HttpRequest> requests = new CopyOnWriteArrayList<>();
+    private final AtomicLong delivered = new AtomicLong();
     private final int status;
+    private final Map<String, List<String>> headers;
     private final List<byte[]> parts;
 
     RecordingHttpClient(int status, byte[] body) {
-        this(status, body.length == 0 ? List.of() : List.of(body.clone()));
+        this(status, Map.of(), body.length == 0 ? List.of() : List.of(body.clone()));
     }
 
-    private RecordingHttpClient(int status, List<byte[]> parts) {
+    private RecordingHttpClient(int status, Map<String, List<String>> headers, List<byte[]> parts) {
         this.status = status;
+        this.headers = Map.copyOf(headers);
         this.parts = List.copyOf(parts);
     }
 
     static RecordingHttpClient answeringInParts(int status, List<byte[]> parts) {
-        return new RecordingHttpClient(status, parts);
+        return new RecordingHttpClient(status, Map.of(), parts);
+    }
+
+    static RecordingHttpClient answeringWithContentLength(int status, long contentLength, byte[] body) {
+        return new RecordingHttpClient(status, Map.of("Content-Length", List.of(Long.toString(contentLength))), List.of(body.clone()));
+    }
+
+    long deliveredBytes() {
+        return delivered.get();
     }
 
     List<HttpRequest> requests() {
@@ -41,7 +53,7 @@ final class RecordingHttpClient extends HttpClientDouble {
     @Override
     public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
         requests.add(request);
-        HttpHeaders headers = HttpHeaders.of(Map.of(), (name, value) -> true);
+        HttpHeaders headers = HttpHeaders.of(this.headers, (name, value) -> true);
         HttpResponse.BodySubscriber<T> subscriber = handler.apply(new ResponseInfo(status, headers));
         AtomicBoolean cancelled = new AtomicBoolean();
         subscriber.onSubscribe(new Flow.Subscription() {
@@ -58,6 +70,7 @@ final class RecordingHttpClient extends HttpClientDouble {
             if (cancelled.get()) {
                 break;
             }
+            delivered.addAndGet(part.length);
             subscriber.onNext(List.of(ByteBuffer.wrap(part)));
         }
         if (!cancelled.get()) {

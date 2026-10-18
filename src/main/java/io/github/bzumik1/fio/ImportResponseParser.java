@@ -11,8 +11,10 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,12 +47,15 @@ final class ImportResponseParser {
     private static List<Sum> sums(Element sums) {
         List<Sum> parsed = new ArrayList<>();
         for (Element sum : sums.all("sum")) {
-            parsed.add(new Sum(
-                    sum.attribute("id"),
-                    optionalNumber(sum, "sumDebet", RawValue::toDecimal),
-                    optionalNumber(sum, "sumCredit", RawValue::toDecimal)));
+            Currency currency = new RawValue("The sum id", sum.attribute("id")).requiredCurrency();
+            parsed.add(new Sum(currency, money(sum, "sumDebet", currency), money(sum, "sumCredit", currency)));
         }
         return parsed;
+    }
+
+    private static @Nullable Money money(Element sum, String name, Currency currency) {
+        BigDecimal amount = optionalNumber(sum, name, RawValue::toDecimal);
+        return amount == null ? null : new Money(amount, currency);
     }
 
     private static List<Message> messages(Element result, Element ordersDetails) {

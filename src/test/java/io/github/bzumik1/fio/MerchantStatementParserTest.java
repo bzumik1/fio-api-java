@@ -214,7 +214,7 @@ class MerchantStatementParserTest {
 
     @ParameterizedTest
     @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
-    void should_reject_without_building_the_number_when_parsed_given_amount_with_too_many_digits(String amount) {
+    void should_reject_when_parsed_given_amount_with_too_many_digits(String amount) {
         assertThatThrownBy(() -> parser.parse(statement(transaction("amount", amount))))
                 .isExactlyInstanceOf(MalformedResponseException.class)
                 .hasMessageStartingWith("Transaction[1]/amount is not a decimal number: '");

@@ -24,6 +24,10 @@ final class PaymentSamples {
         return domesticBuilder().build();
     }
 
+    static DomesticPayment domesticInEuro() {
+        return domesticBuilder().amount(euro("100.00")).build();
+    }
+
     static DomesticPayment fullDomestic() {
         return domesticBuilder()
                 .constantSymbol("0558")

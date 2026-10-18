@@ -112,13 +112,9 @@ public interface FioClient {
         /**
          * Chooses the movements after the bookmark of the last download. When the answer holds movements, the bank
          * moves the bookmark to the newest of them, so a download that is lost before it is stored cannot be
-         * repeated without {@link Bookmark moving the bookmark back}. A {@link FioTransportException} whose
-         * {@link FioTransportException#mayHaveReachedTheBank()} is {@code true} is such a loss: the bank may have
-         * answered and moved the bookmark, so move it back to the last stored movement before downloading again.
-         * A {@link FioMalformedResponseException} from {@link TransactionRequest#fetch()} is one too: the bank
-         * answered and may have moved the bookmark although the answer could not be read, so move the bookmark
-         * back to the last stored movement and download the movements again; the same holds for a plain
-         * {@link FioException} without a status for an answer over the size limit.
+         * repeated without {@link Bookmark moving the bookmark back}. A failure whose
+         * {@link FioException#mayHaveTakenEffect()} is {@code true} is such a loss: the bank may have moved the
+         * bookmark, so move it back to the last stored movement before downloading again.
          *
          * @return the chosen download
          */
@@ -166,6 +162,10 @@ public interface FioClient {
          * of {@link StatementRequest#statementId()}, {@link StatementRequest#fetch()} and
          * {@link StatementRequest#download(StatementFormat)} called on the returned request and kept there, so a
          * fetch or download costs two requests, 30 seconds apart, and keeping the request saves asking again.
+         * With {@link RateLimit#failFast()}, or a {@link RateLimit#waitUpTo(Duration) wait} under 30
+         * seconds, the first fetch or download on a fresh request therefore fails with
+         * {@link FioRateLimitException} once the number is known; call it again on the same request after
+         * {@link FioRateLimitException#retryAfter()}.
          *
          * @return the chosen download
          */
@@ -318,12 +318,8 @@ public interface FioClient {
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
          * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
-         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
-         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
-         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
-         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
-         *         answer over the size limit; after the last two the bank has received the batch and may have
-         *         accepted it
+         *         answers in a way this client cannot read; when its {@link FioException#mayHaveTakenEffect()} is
+         *         {@code true}, check the pending batches in Fio internet banking before submitting again
          * @throws IllegalArgumentException when the batch written as Fio XML is larger than
          *         {@link PaymentFile#MAXIMUM_SIZE}, the most the bank imports at once
          */
@@ -336,19 +332,19 @@ public interface FioClient {
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
          * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
-         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
-         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
-         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
-         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
-         *         answer over the size limit; after the last two the bank has received the batch and may have
-         *         accepted it
+         *         answers in a way this client cannot read; when its {@link FioException#mayHaveTakenEffect()} is
+         *         {@code true}, check the pending batches in Fio internet banking before submitting again
          */
         ImportResult upload(PaymentFile file);
     }
 
     /**
      * A batch of payment orders being put together for submission. It is meant for one thread and one submission:
-     * after {@link #submit()} it cannot be submitted again.
+     * a {@link #submit()} that may have reached the bank spends it, whatever the outcome, so that a batch the bank
+     * may have accepted is not sent twice. A submission that certainly never left the client, a
+     * {@link FioRateLimitException} without a status or a {@link FioTransportException} whose
+     * {@link FioTransportException#mayHaveReachedTheBank()} is {@code false}, leaves it unspent, so the same batch
+     * can be submitted again.
      */
     interface BatchRequest {
 
@@ -403,17 +399,14 @@ public interface FioClient {
          * @return the bank's answer to the batch; a batch the bank checked and rejected is an answer whose
          *         {@link ImportResult#isAccepted()} is {@code false}, not an exception
          * @throws FioException when the bank does not answer, refuses the request before checking the orders, or
-         *         answers in a way this client cannot read. Three of these leave the outcome unknown, so check the
-         *         pending batches in Fio internet banking before submitting again: a {@link FioTransportException}
-         *         whose {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}, a
-         *         {@link FioMalformedResponseException}, and a plain {@link FioException} without a status for an
-         *         answer over the size limit; after the last two the bank has received the batch and may have
-         *         accepted it
+         *         answers in a way this client cannot read; when its {@link FioException#mayHaveTakenEffect()} is
+         *         {@code true}, check the pending batches in Fio internet banking before submitting again
          * @throws IllegalStateException when the batch is empty, its orders are not all from the same account (the
-         *         one the token belongs to), the batch written as Fio XML is larger than
-         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted; the first three are an
-         *         {@link IllegalArgumentException} from {@link PaymentBatch} and {@link Payments#submit(PaymentBatch)},
-         *         where the batch is an argument
+         *         one the token belongs to) and in the same currency, the batch written as Fio XML is larger than
+         *         {@link PaymentFile#MAXIMUM_SIZE}, or it was already submitted by a call that may have reached the
+         *         bank, as the {@linkplain BatchRequest batch} describes; the account, currency and size
+         *         checks are an {@link IllegalArgumentException} from {@link PaymentBatch} and
+         *         {@link Payments#submit(PaymentBatch)}, where the batch is an argument
          */
         ImportResult submit();
     }
@@ -584,11 +577,13 @@ public interface FioClient {
 
         /**
          * Stops reading an answer that grows beyond a size, so that a misbehaving host cannot exhaust the heap.
-         * The default, 256 MiB, holds the largest answer the bank documents, 50 000 movements with every field
-         * at its longest; a client that only ever downloads short periods can go lower.
+         * The default, 256 MiB, holds the largest answer the bank documents, 50 000 movements with Czech text in
+         * every field at its longest, about 254 MiB; text with characters of three bytes or more in UTF-8 can
+         * make it longer, and a client that expects such answers can go higher, while one that only ever downloads
+         * short periods can go lower.
          *
          * @param bytes the most bytes of one answer the client reads, positive; an answer longer than that fails
-         *        with a plain {@link FioException} without a status
+         *        with a {@link FioResponseTooLargeException}
          * @return this builder
          * @throws IllegalArgumentException when the size is not positive
          */

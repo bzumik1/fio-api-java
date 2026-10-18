@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ImportResultTest {
+
+    private static final Currency CZK = Currency.getInstance("CZK");
+    private static final Currency EUR = Currency.getInstance("EUR");
 
     @ParameterizedTest
     @CsvSource({"OK, true", "WARNING, true", "ERROR, false", "FATAL, false"})
@@ -25,7 +29,7 @@ class ImportResultTest {
 
     @Test
     void should_keep_own_copies_when_created_given_mutable_lists() {
-        List<Sum> sums = new ArrayList<>(List.of(new Sum("CZK", BigDecimal.TEN, null)));
+        List<Sum> sums = new ArrayList<>(List.of(new Sum(CZK, Money.czk(BigDecimal.TEN), null)));
         List<Message> messages = new ArrayList<>(List.of(new Message(1, Status.OK, "OK")));
 
         ImportResult result = new ImportResult(0, Status.OK, 42L, sums, messages);
@@ -33,7 +37,8 @@ class ImportResultTest {
         messages.clear();
 
         assertThat(result)
-                .returns(List.of(new Sum("CZK", BigDecimal.TEN, null)), ImportResult::sums)
+                .returns(42L, ImportResult::batchId)
+                .returns(List.of(new Sum(CZK, Money.czk(BigDecimal.TEN), null)), ImportResult::sums)
                 .returns(List.of(new Message(1, Status.OK, "OK")), ImportResult::messages);
     }
 
@@ -52,16 +57,21 @@ class ImportResultTest {
     }
 
     @Test
+    void should_reject_when_created_given_sum_without_currency() {
+        assertThatNullPointerException().isThrownBy(() -> new Sum(null, null, null)).withMessage("currency");
+    }
+
+    @Test
     void should_reject_when_created_given_message_without_text() {
         assertThatNullPointerException().isThrownBy(() -> new Message(1, Status.OK, null)).withMessage("text");
     }
 
     @Test
     void should_equal_by_value_when_compared_given_same_parts() {
-        ImportResult result = new ImportResult(2, Status.WARNING, 7L, List.of(new Sum("EUR", null, BigDecimal.ONE)),
+        ImportResult result = new ImportResult(2, Status.WARNING, 7L, List.of(new Sum(EUR, null, Money.of("1", "EUR"))),
                 List.of(new Message(null, Status.WARNING, "Pozor")));
 
-        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, 7L, List.of(new Sum("EUR", null, BigDecimal.ONE)),
+        assertThat(result).isEqualTo(new ImportResult(2, Status.WARNING, 7L, List.of(new Sum(EUR, null, Money.of("1", "EUR"))),
                 List.of(new Message(null, Status.WARNING, "Pozor"))));
     }
 }

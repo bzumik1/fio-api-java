@@ -25,12 +25,16 @@
  * {@link io.github.bzumik1.fio.DomesticPayment}, {@link io.github.bzumik1.fio.EuroPayment} and
  * {@link io.github.bzumik1.fio.ForeignPayment}. Their accessors are stable; their canonical constructors and
  * record patterns are not, so construct the payment orders with their builders.</li>
+ * <li>{@link io.github.bzumik1.fio.FioException} may gain subtypes for failures that are a plain
+ * {@code FioException} until then. The class itself is thrown too, so a {@code switch} over it names each subtype
+ * and ends with {@code case FioException e} for the rest, which still catches a new subtype; a {@code catch} of
+ * the plain class does too.</li>
  * </ul>
  *
- * <p>The sealed hierarchies {@link io.github.bzumik1.fio.FioException}, {@link io.github.bzumik1.fio.BankAccount},
- * {@link io.github.bzumik1.fio.PaymentOrder} and {@link io.github.bzumik1.fio.DownloadFormat} gain permitted
- * subtypes only in a major release, so an exhaustive {@code switch} over them is safe. Everything else is stable in
- * full, among it the value types {@link io.github.bzumik1.fio.Money},
+ * <p>The sealed hierarchies {@link io.github.bzumik1.fio.BankAccount}, {@link io.github.bzumik1.fio.PaymentOrder}
+ * and {@link io.github.bzumik1.fio.DownloadFormat} gain permitted subtypes only in a major release, so an
+ * exhaustive {@code switch} over them is safe. Everything else is stable in full, among it the value types
+ * {@link io.github.bzumik1.fio.Money},
  * {@link io.github.bzumik1.fio.DomesticAccount}, {@link io.github.bzumik1.fio.ForeignAccount},
  * {@link io.github.bzumik1.fio.StatementId}, {@link io.github.bzumik1.fio.PaymentSymbols},
  * {@link io.github.bzumik1.fio.Beneficiary}, {@link io.github.bzumik1.fio.PaymentBatch},

@@ -25,8 +25,8 @@ public record Beneficiary(String name, @Nullable String street, @Nullable String
      * @param street the street
      * @param city the city
      * @param country the country code
-     * @throws IllegalArgumentException when a text is too long or holds a character XML cannot carry, or the
-     *         country is not a code of Fio's list
+     * @throws IllegalArgumentException when the name is blank, a text is too long or holds a character XML cannot
+     *         carry, or the country is not a code of Fio's list
      */
     public Beneficiary {
         name = required(name, SCHEMA_LIMIT, "beneficiary's name");

@@ -10,10 +10,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URI;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +20,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static io.github.bzumik1.fio.Fixtures.IMPORT_ACCEPTED;
 import static io.github.bzumik1.fio.Fixtures.PERIODS_STATEMENT;
@@ -33,11 +33,11 @@ import static io.github.bzumik1.fio.StubBank.TOKEN;
 import static io.github.bzumik1.fio.StubBank.printed;
 import static io.github.bzumik1.fio.Threads.awaitWaitingForLock;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.assertj.core.api.Assertions.tuple;
 
@@ -177,6 +177,21 @@ class FioClientTest {
                 LAST_STATEMENT,
                 "/v1/rest/by-id/" + SECRET + "/2026/10/transactions.json",
                 "/v1/rest/by-id/" + SECRET + "/2026/10/transactions.pdf");
+    }
+
+    @Test
+    void should_fail_first_and_fetch_on_the_same_request_after_the_slot_when_fetched_given_latest_and_fail_fast() {
+        server().route("lastStatement", 200, "text/plain", "2026,10".getBytes(StandardCharsets.UTF_8));
+        server().route("transactions.json", 200, JSON, Fixtures.read(PERIODS_STATEMENT).getBytes(StandardCharsets.UTF_8));
+        FioClient.StatementRequest latest = bank.builder().rateLimit(RateLimit.failFast()).build().statements().latest();
+
+        FioRateLimitException refused = catchThrowableOfType(FioRateLimitException.class, latest::fetch);
+        bank.time().advance(Duration.between(bank.time().now(), refused.retryAfter()));
+        latest.fetch();
+
+        assertThat(refused.statusCode()).isEmpty();
+        assertThat(server().requests()).extracting(RecordedRequest::path).containsExactly(
+                LAST_STATEMENT, "/v1/rest/by-id/" + SECRET + "/2026/10/transactions.json");
     }
 
     @Test
@@ -389,16 +404,18 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_without_reading_when_downloading_given_answer_longer_than_the_limit() {
+    void should_raise_too_large_failure_without_reading_when_downloading_given_answer_longer_than_the_limit() {
         FioClient limited = bank.builder().maximumResponseSize(1024).build();
         server().respondWith(200, "application/pdf", new byte[4096]);
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class)
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class)
                 .hasMessageContaining("more than 1024 bytes")
                 .hasMessageNotContaining(SECRET);
+        assertThat(((FioResponseTooLargeException) failure).limit()).isEqualTo(1024);
+        assertThat(failure.mayHaveTakenEffect()).isTrue();
         assertThat(failure.statusCode()).isEmpty();
         assertThat(failure.responseBody()).isEmpty();
         assertThat(failure.getCause()).hasMessageContaining("longer than 1024 bytes");
@@ -415,36 +432,59 @@ class FioClientTest {
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_answer_one_byte_over_the_limit() {
+    void should_raise_too_large_failure_when_downloading_given_answer_one_byte_over_the_limit() {
         FioClient limited = bank.builder().maximumResponseSize(4096).build();
         server().respondWith(200, "application/pdf", new byte[4097]);
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 4096 bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 4096 bytes");
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_answer_over_the_limit_in_several_parts() {
+    void should_raise_too_large_failure_when_downloading_given_answer_over_the_limit_in_several_parts() {
         RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, List.of(new byte[600], new byte[600], new byte[600]));
         FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
 
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than 1024 bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 1024 bytes");
     }
 
     @Test
-    void should_reject_when_maximum_response_size_set_given_size_not_positive() {
-        assertThatThrownBy(() -> bank.builder().maximumResponseSize(0))
+    void should_fail_without_reading_the_body_when_downloading_given_content_length_over_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringWithContentLength(200, 1025, new byte[10]);
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.statements().number(2026, 1).download(StatementFormat.PDF));
+
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class).hasMessageContaining("more than 1024 bytes");
+        assertThat(http.deliveredBytes()).isZero();
+    }
+
+    @Test
+    void should_read_the_whole_answer_when_downloading_given_content_length_at_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringWithContentLength(200, 1024, new byte[1024]);
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        Download pdf = limited.statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf.content()).hasSize(1024);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, Integer.MIN_VALUE})
+    void should_reject_when_maximum_response_size_set_given_size_not_positive(int bytes) {
+        assertThatThrownBy(() -> bank.builder().maximumResponseSize(bytes))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The maximum response size must be positive: 0");
+                .hasMessage("The maximum response size must be positive: " + bytes);
     }
 
     @Test
-    void should_raise_generic_failure_when_downloading_given_default_builder_and_answer_over_256_mib() {
+    void should_raise_too_large_failure_when_downloading_given_default_builder_and_answer_over_256_mib() {
         byte[] mebibyte = new byte[1024 * 1024];
         List<byte[]> parts = new ArrayList<>(Collections.nCopies(256, mebibyte));
         parts.add(new byte[1]);
@@ -453,7 +493,22 @@ class FioClientTest {
         FioException failure = catchThrowableOfType(FioException.class,
                 () -> bank.builder().httpClient(http).build().statements().number(2026, 1).download(StatementFormat.PDF));
 
-        assertThat(failure).isExactlyInstanceOf(FioException.class).hasMessageContaining("more than " + 256 * 1024 * 1024 + " bytes");
+        assertThat(failure).isExactlyInstanceOf(FioResponseTooLargeException.class)
+                .hasMessageContaining("more than " + 256 * 1024 * 1024 + " bytes");
+        assertThat(((FioResponseTooLargeException) failure).limit()).isEqualTo(256 * 1024 * 1024);
+    }
+
+    @Test
+    void should_read_an_answer_over_256_mib_when_downloading_given_maximum_response_size_raised_above_the_default() {
+        byte[] mebibyte = new byte[1024 * 1024];
+        List<byte[]> parts = new ArrayList<>(Collections.nCopies(256, mebibyte));
+        parts.add(new byte[1]);
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(200, parts);
+        FioClient raised = bank.builder().httpClient(http).maximumResponseSize(256 * 1024 * 1024 + 1).build();
+
+        Download pdf = raised.statements().number(2026, 1).download(StatementFormat.PDF);
+
+        assertThat(pdf).hasToString("Download[application/octet-stream, UTF-8, " + (256 * 1024 * 1024 + 1) + " bytes]");
     }
 
     @Test
@@ -758,6 +813,31 @@ class FioClientTest {
     }
 
     @Test
+    void should_print_no_beginning_of_the_token_when_fetched_given_merchant_date_time_the_jdk_cuts_inside_the_token() {
+        String merchant = Fixtures.read(Fixtures.MERCHANT_DOCUMENTATION_EXAMPLE)
+                .replaceFirst("<transactionDateTime>[^<]*</transactionDateTime>",
+                        "<transactionDateTime>" + "x".repeat(20) + SECRET + "</transactionDateTime>");
+        server().respondWith(200, "application/xml", merchant.getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> client().merchant().between(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 16)).fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioMalformedResponseException.class);
+        assertThat(printed(failure)).contains("...").doesNotContain(SECRET.substring(0, 12));
+    }
+
+    @Test
+    void should_keep_the_first_16_ki_characters_masked_when_refused_given_error_page_of_one_mebibyte() {
+        server().respondWith(400, "text/html", (SECRET + "y".repeat(1024 * 1024)).getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> client().transactions().sinceBookmark().fetch());
+
+        assertThat(failure.statusCode()).hasValue(400);
+        assertThat(failure.responseBody()).hasValue("***" + "y".repeat(FioException.RESPONSE_BODY_LIMIT - 3) + "\u2026");
+        assertThat(failure.getMessage()).hasSizeLessThan(300);
+    }
+
+    @Test
     void should_permit_only_documented_failures_when_switched_over_given_sealed_hierarchy() {
         List<Class<?>> permitted = List.of(FioException.class.getPermittedSubclasses());
 
@@ -768,6 +848,7 @@ class FioClientTest {
                 FioHistoryLockedException.class,
                 FioTooManyTransactionsException.class,
                 FioMalformedResponseException.class,
-                FioTransportException.class);
+                FioTransportException.class,
+                FioResponseTooLargeException.class);
     }
 }

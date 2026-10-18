@@ -260,12 +260,37 @@ class AccountStatementParserTest {
 
     @ParameterizedTest
     @MethodSource("io.github.bzumik1.fio.DecimalBounds#beyond")
-    void should_reject_without_building_the_number_when_parsed_given_amount_as_string_with_too_many_digits(String amount) {
+    void should_reject_when_parsed_given_amount_as_string_with_too_many_digits(String amount) {
         String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "\"" + amount + "\"")));
 
         assertThatThrownBy(() -> parser.parse(json))
                 .isExactlyInstanceOf(MalformedResponseException.class)
                 .hasMessageStartingWith("column 1 (Objem) is not a decimal number: '");
+    }
+
+    @Test
+    void should_reject_when_parsed_given_amount_as_number_with_41_integer_digits() {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "9".repeat(41))));
+
+        assertThatThrownBy(() -> parser.parse(json))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessageStartingWith("column 1 (Objem) is not a decimal number: '");
+    }
+
+    @Test
+    void should_keep_every_digit_when_parsed_given_amount_as_number_with_40_integer_digits() {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "-" + "9".repeat(40) + ".25")));
+
+        assertThat(parser.parse(json).transactions().get(0).amount().amount()).isEqualTo(new BigDecimal("-" + "9".repeat(40) + ".25"));
+    }
+
+    @Test
+    void should_reject_as_invalid_json_when_parsed_given_amount_as_number_longer_than_jackson_reads() {
+        String json = statementWith(MINIMAL_INFO, transaction(replacing(1, "-" + "9".repeat(40) + "." + "1".repeat(1000))));
+
+        assertThatThrownBy(() -> parser.parse(json))
+                .isExactlyInstanceOf(MalformedResponseException.class)
+                .hasMessage("The body is not valid JSON");
     }
 
     @ParameterizedTest

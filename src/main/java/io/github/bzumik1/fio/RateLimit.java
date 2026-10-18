@@ -11,8 +11,10 @@ import static java.util.Objects.requireNonNull;
  * {@link FioClient#MINIMUM_REQUEST_INTERVAL 30 seconds}.
  *
  * <p>With {@link #waitUpTo(Duration)} the client spaces its own requests 30 seconds apart, and when the bank still
- * answers HTTP 409 (the token was used elsewhere) it waits for the next slot and tries again, until the total time
- * spent waiting on one call would exceed the limit; then it throws {@link FioRateLimitException}. With
+ * answers HTTP 409 (the token was used elsewhere) it waits for the next slot and tries again, until the next slot
+ * would come later than {@link #maximumWait()} after the call started; then it throws
+ * {@link FioRateLimitException}. That deadline counts from the start of the call and includes the HTTP exchanges
+ * on the way, such as a first attempt the bank refused. With
  * {@link #failFast()} the client never waits: a request too soon after the previous one, or one the bank refuses,
  * throws {@link FioRateLimitException} at once, and {@link FioRateLimitException#retryAfter()} says when to try again.
  */
@@ -39,7 +41,8 @@ public final class RateLimit {
     /**
      * Waits for a free slot, at most the given time per call.
      *
-     * @param maximumWait the longest total wait one call may spend, positive and at most one day
+     * @param maximumWait how much later than the start of a call its last slot may come, positive and at most one
+     *        day
      * @return the policy
      * @throws IllegalArgumentException when the duration is not positive or longer than one day
      */
@@ -64,7 +67,8 @@ public final class RateLimit {
     }
 
     /**
-     * Returns the longest total wait one call may spend; zero for {@link #failFast()}.
+     * Returns how much later than the start of a call its last slot may come, HTTP exchanges included; zero for
+     * {@link #failFast()}.
      *
      * @return the maximum wait
      */

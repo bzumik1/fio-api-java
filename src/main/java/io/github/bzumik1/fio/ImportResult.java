@@ -2,7 +2,7 @@ package io.github.bzumik1.fio;
 
 import org.jspecify.annotations.Nullable;
 
-import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -14,14 +14,14 @@ import static java.util.Objects.requireNonNull;
  * @param errorCode 0 when the batch was accepted, 2 when accepted with warnings, else the code Fio's documentation
  *        lists
  * @param status whether the batch was accepted, accepted with warnings, or refused
- * @param instructionId the id of the batch in the bank, when it was accepted
+ * @param batchId the id the bank gave the batch (číslo dávky), when it was accepted
  * @param sums the sums of the orders, one for each currency of the batch
  * @param messages what the bank said about the batch and its orders, in the language chosen for the client
  */
 public record ImportResult(
         int errorCode,
         Status status,
-        @Nullable Long instructionId,
+        @Nullable Long batchId,
         List<Sum> sums,
         List<Message> messages) {
 
@@ -30,7 +30,7 @@ public record ImportResult(
      *
      * @param errorCode the error code
      * @param status the status
-     * @param instructionId the batch id
+     * @param batchId the batch id
      * @param sums the sums
      * @param messages the messages
      */
@@ -68,14 +68,24 @@ public record ImportResult(
     }
 
     /**
-     * The sums of the orders of a batch in one currency.
+     * The sums of the orders of a batch in one currency. The sums compare by value, like every {@link Money}.
      *
-     * @param currency the ISO 4217 code of the currency, as the bank names the sum, or {@code null} when it names
-     *        none
-     * @param debit the sum of the debit orders, or {@code null} when the bank left it out
-     * @param credit the sum of the credit orders, or {@code null} when the bank left it out
+     * @param currency the currency the bank names the sum by
+     * @param debit the sum of the debit orders in that currency, or {@code null} when the bank left it out
+     * @param credit the sum of the credit orders in that currency, or {@code null} when the bank left it out
      */
-    public record Sum(@Nullable String currency, @Nullable BigDecimal debit, @Nullable BigDecimal credit) {
+    public record Sum(Currency currency, @Nullable Money debit, @Nullable Money credit) {
+
+        /**
+         * Validates the currency.
+         *
+         * @param currency the currency
+         * @param debit the sum of the debit orders
+         * @param credit the sum of the credit orders
+         */
+        public Sum {
+            requireNonNull(currency, "currency");
+        }
     }
 
     /**

@@ -54,6 +54,7 @@ class ExceptionSerializationTest {
         assertThat(copy).isExactlyInstanceOf(failure.getClass()).hasMessage(failure.getMessage());
         assertThat(copy.statusCode()).isEqualTo(failure.statusCode());
         assertThat(copy.responseBody()).isEqualTo(failure.responseBody());
+        assertThat(copy.mayHaveTakenEffect()).isEqualTo(failure.mayHaveTakenEffect());
         assertThat(detail.apply(copy)).isEqualTo(expectedDetail);
     }
 
@@ -72,7 +73,9 @@ class ExceptionSerializationTest {
                 Arguments.of(new FioMalformedResponseException("not understood", 200, "<html>", new IllegalStateException("bad")),
                         detail(failure -> failure.getCause().getMessage()), "bad"),
                 Arguments.of(new FioTransportException("failed", null, true),
-                        detail(failure -> ((FioTransportException) failure).mayHaveReachedTheBank()), true));
+                        detail(failure -> ((FioTransportException) failure).mayHaveReachedTheBank()), true),
+                Arguments.of(new FioResponseTooLargeException("too long", 1024, new IllegalStateException("cut")),
+                        detail(failure -> ((FioResponseTooLargeException) failure).limit()), 1024));
     }
 
     private static Function<FioException, Object> detail(Function<FioException, Object> detail) {

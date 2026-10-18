@@ -9,21 +9,24 @@ import java.util.OptionalInt;
 
 /**
  * A request to the Fio API failed. The subclasses name the documented refusals, an answer the client does not
- * understand and a request that got no answer; this class itself is thrown for any other HTTP status.
+ * understand, an answer longer than the client reads and a request that got no answer; this class itself is thrown
+ * for any other HTTP status.
  *
- * <p>This class itself is also thrown, without a status, for an answer longer than the client reads (256 MiB
- * unless {@link FioClient.Builder#maximumResponseSize(int)} says otherwise).
- * Like {@link FioMalformedResponseException}, it comes after the bank received the request: a submitted batch may
- * have been accepted, and {@link FioClient.Transactions#sinceBookmark()} may have moved the bookmark.
+ * <p>When {@link #mayHaveTakenEffect()} is {@code true}, the bank may have acted on the request: check the pending
+ * batches in Fio internet banking, or move the bookmark of {@link FioClient.Transactions#sinceBookmark()} back,
+ * before trying again.
  *
- * <p>The hierarchy is sealed, so a {@code switch} over it can be exhaustive. Every message and body has the token
+ * <p>The hierarchy is sealed, and this class itself is thrown too, so a {@code switch} can name each subtype and
+ * ends with {@code case FioException e} for the rest. A minor release may add a subtype for a failure that is a
+ * plain {@code FioException} until then, which that last case still catches. Every message and body has the token
  * masked, and a body is cut to its first {@value #RESPONSE_BODY_LIMIT} characters. The status and the body are
  * {@link OptionalInt} and {@link Optional} rather than nullable, as an exception is read far from where it is
  * thrown.
  */
 public sealed class FioException extends RuntimeException
         permits FioRateLimitException, FioAuthorizationException, FioHistoryLockedException,
-        FioTooManyTransactionsException, FioMalformedResponseException, FioTransportException {
+        FioTooManyTransactionsException, FioMalformedResponseException, FioTransportException,
+        FioResponseTooLargeException {
 
     /** The most characters of a response body an exception keeps. */
     public static final int RESPONSE_BODY_LIMIT = 16 * 1024;
@@ -65,7 +68,8 @@ public sealed class FioException extends RuntimeException
     }
 
     /**
-     * Creates an exception for a request that got no answer.
+     * Creates an exception without an answer to keep: for a request that got no answer, or one longer than the
+     * client reads.
      *
      * @param message what happened, with the token masked
      * @param cause the cause, with the token masked
@@ -81,7 +85,7 @@ public sealed class FioException extends RuntimeException
     }
 
     /**
-     * Returns the HTTP status of the answer; empty when there was no answer.
+     * Returns the HTTP status of the answer; empty when there was no answer, or one longer than the client reads.
      *
      * @return the status
      */
@@ -91,11 +95,28 @@ public sealed class FioException extends RuntimeException
 
     /**
      * Returns the body of the answer with the token masked and cut to its first {@value #RESPONSE_BODY_LIMIT}
-     * characters, with an ellipsis after a cut; empty when there was no answer.
+     * characters, with an ellipsis after a cut; empty when there was no answer, or one longer than the client
+     * reads.
      *
      * @return the body
      */
     public Optional<String> responseBody() {
         return Optional.ofNullable(responseBody);
+    }
+
+    /**
+     * Tells whether the bank may have acted on the request although it failed: whether a submitted batch may be
+     * waiting for authorisation, or {@link FioClient.Transactions#sinceBookmark()} may have moved the bookmark.
+     * It is {@code true} for a {@link FioMalformedResponseException} and a {@link FioResponseTooLargeException},
+     * which come after the bank answered, and for a {@link FioTransportException} whose
+     * {@link FioTransportException#mayHaveReachedTheBank()} is {@code true}. It is {@code false} for an error
+     * status, with which Fio refuses a request without acting on it, and for a request the client did not send.
+     * When it is {@code true}, check the pending batches in Fio internet banking, or move the bookmark back, before
+     * trying again.
+     *
+     * @return whether the request may have taken effect
+     */
+    public boolean mayHaveTakenEffect() {
+        return false;
     }
 }

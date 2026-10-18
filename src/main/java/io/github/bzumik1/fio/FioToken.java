@@ -20,6 +20,7 @@ public final class FioToken {
     private static final Pattern URL_PATH_SAFE = Pattern.compile("[A-Za-z0-9_-]+");
     private static final int MINIMUM_LENGTH = 16;
     private static final String MASK = "***";
+    private static final int SHORTEST_MASKED_BEGINNING = 12;
 
     private final String value;
 
@@ -78,28 +79,32 @@ public final class FioToken {
 
     String maskExcerpt(String text) {
         String masked = text.replace(value, MASK);
-        String cutMark = MalformedResponseException.CUT_MARK;
         StringBuilder result = new StringBuilder(masked.length());
-        int from = 0;
-        for (int cut = masked.indexOf(cutMark); cut >= 0; cut = masked.indexOf(cutMark, cut + 1)) {
-            int start = cut - beginningCutShortAt(masked, cut);
-            result.append(masked, from, start).append(start < cut ? MASK : "").append(cutMark);
-            from = cut + cutMark.length();
+        int position = 0;
+        while (position < masked.length()) {
+            int beginning = beginningOfTokenAt(masked, position);
+            if (beginning >= SHORTEST_MASKED_BEGINNING) {
+                result.append(MASK);
+                position += beginning;
+            } else {
+                result.append(masked.charAt(position));
+                position++;
+            }
         }
-        return result.append(masked, from, masked.length()).toString();
+        return result.toString();
     }
 
     boolean occursIn(@Nullable String text) {
         return text != null && !maskExcerpt(text).equals(text);
     }
 
-    private int beginningCutShortAt(String text, int cut) {
-        for (int length = Math.min(cut, value.length()); length > 0; length--) {
-            if (text.regionMatches(cut - length, value, 0, length)) {
-                return length;
-            }
+    private int beginningOfTokenAt(String text, int position) {
+        int longest = Math.min(value.length(), text.length() - position);
+        int length = 0;
+        while (length < longest && text.charAt(position + length) == value.charAt(length)) {
+            length++;
         }
-        return 0;
+        return length;
     }
 
     @Override

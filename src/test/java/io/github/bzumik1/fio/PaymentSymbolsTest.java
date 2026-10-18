@@ -5,6 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.stream.Stream;
 
@@ -53,5 +54,12 @@ class PaymentSymbolsTest {
                         kind.equals("constant") ? symbol : null,
                         kind.equals("specific") ? symbol : null))
                 .withMessage("A " + kind + " symbol is up to " + digits + " digits: '" + symbol + "'");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "12345678901", "12a"})
+    void should_reject_when_created_given_variable_symbol_that_is_not_one_to_ten_digits(String variable) {
+        assertThatIllegalArgumentException().isThrownBy(() -> PaymentSymbols.ofVariable(variable))
+                .withMessage("A variable symbol is up to 10 digits: '" + variable + "'");
     }
 }

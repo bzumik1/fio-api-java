@@ -51,7 +51,7 @@ final class HttpPayments implements FioClient.Payments {
         return new ImportResult(
                 result.errorCode(),
                 result.status(),
-                result.instructionId(),
+                result.batchId(),
                 result.sums(),
                 numberedInBatch(result.messages(), fileOrder));
     }
@@ -129,7 +129,17 @@ final class HttpPayments implements FioClient.Payments {
                 throw new IllegalStateException(e.getMessage(), e);
             }
             submitted = true;
-            return submitted(batch, xml);
+            try {
+                return submitted(batch, xml);
+            } catch (FioException failure) {
+                submitted = !neverSent(failure);
+                throw failure;
+            }
+        }
+
+        private static boolean neverSent(FioException failure) {
+            return failure instanceof FioRateLimitException && failure.statusCode().isEmpty()
+                    || failure instanceof FioTransportException transport && !transport.mayHaveReachedTheBank();
         }
 
         private <B> FioClient.BatchRequest built(

@@ -58,7 +58,8 @@ requires io.github.bzumik1.fio;
 ```java
 FioClient fio = FioClient.builder(FioToken.fromEnvironment("FIO_TOKEN")).build();
 
-AccountStatement statement = fio.transactions().between(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31)).fetch();
+LocalDate today = LocalDate.now(ZoneId.of("Europe/Prague"));
+AccountStatement statement = fio.transactions().between(today.minusDays(30), today).fetch();
 for (Transaction transaction : statement.transactions()) {
     if (transaction.isIncoming()) {
         System.out.println(transaction.date() + " " + transaction.amount()
@@ -71,9 +72,10 @@ for (Transaction transaction : statement.transactions()) {
 ### Movements
 
 ```java
-AccountStatement january = fio.transactions().between(from, to).fetch();
+LocalDate today = LocalDate.now(ZoneId.of("Europe/Prague"));
+AccountStatement lastMonth = fio.transactions().between(today.minusDays(30), today).fetch();
 AccountStatement sinceLastTime = fio.transactions().sinceBookmark().fetch();
-Download csv = fio.transactions().between(from, to).download(TransactionFormat.CSV);
+Download csv = fio.transactions().between(today.minusDays(30), today).download(TransactionFormat.CSV);
 ```
 
 `between` downloads the movements dated within a period, both ends included. `sinceBookmark` downloads the
@@ -88,8 +90,11 @@ bank's answer as it came, in one of `TransactionFormat`'s six formats (CSV, GPC,
 FioClient.StatementRequest latest = fio.statements().latest();
 StatementId number = latest.statementId();
 AccountStatement statement = latest.fetch();
-Download pdf = fio.statements().number(2026, 3).download(StatementFormat.PDF);
+Download pdf = latest.download(StatementFormat.PDF);
 ```
+
+`fio.statements().number(2026, 3)` chooses a statement by its number; one covering days more than 90 days back
+needs the full history unlocked, as described below.
 
 A statement comes typed from its JSON format or raw in any of `StatementFormat`'s ten formats, which add PDF,
 MT940 and the CBA and SBA XML formats to the six above. `latest()` asks the bank for the number once, on the
@@ -137,7 +142,7 @@ if (!result.isAccepted()) {
 ```
 
 A token belongs to one account, and every order in a batch is from that account and in its currency; a batch
-with orders from two accounts is refused before anything is sent. From a euro account, with its own token, the
+with orders from two accounts, or in two currencies, is refused before anything is sent. From a euro account, with its own token, the
 same batch takes SEPA payments:
 
 ```java
@@ -161,17 +166,21 @@ endpoint. `upload(PaymentFile)` posts a ready file in any format the bank import
 pain.008).
 
 A submitted batch is only accepted: the bank processes it once an authorised person confirms it in internet
-banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the batch
-id, the sums per currency, and a message per rejected order. A batch the bank checked and refused comes back as a
+banking. `ImportResult` carries the bank's error code, the status (`OK`, `WARNING`, `ERROR`, `FATAL`), the
+`batchId` the bank gave the batch (not the `instructionId` of a single movement), the debit and credit sums per
+currency as `Money`, and a message per rejected order. A batch the bank checked and refused comes back as a
 result whose `isAccepted()` is false, not as an exception.
 
-When a submission fails with `FioTransportException`, read `mayHaveReachedTheBank()` before trying again: a
-timeout after the request went out means the batch may already be waiting for authorisation, and submitting it
-again would pay twice. A `FioMalformedResponseException`, or a plain `FioException` without a status for an
-answer over the size limit, is worse still: the bank received the batch and answered, so it may have accepted it.
-In all three cases check the pending batches in internet banking first. The same holds for `sinceBookmark()`,
-where an answer lost on the way or one the client could not read may already have moved the bookmark: move it
-back to the last stored movement and download the movements again.
+When a submission fails, read the exception's `mayHaveTakenEffect()` before trying again: when it is true (a
+timeout after the request went out, an answer the client could not read or one too long to read), the batch may
+already be waiting for authorisation, and submitting it again would pay twice, so check the pending batches in
+internet banking first. The same holds for `sinceBookmark()`, which may already have moved the bookmark: move it
+back to the last stored movement before downloading again.
+
+A batch from `batch()` is spent by a `submit()` that may have reached the bank, so a second `submit()` throws
+`IllegalStateException` instead of paying twice. One that certainly never left the client, a
+`FioRateLimitException` without a status (as `RateLimit.failFast()` throws) or a `FioTransportException` whose
+`mayHaveReachedTheBank()` is false, leaves the batch unspent, and `submit()` can be called again.
 
 ### Configuration
 
@@ -192,7 +201,7 @@ FioClient fio = FioClient.builder(token)
 | `httpClient` | 10-second connect timeout | Your own `java.net.http.HttpClient`, for a proxy or a custom SSL context. |
 | `baseUri` | `https://fioapi.fio.cz/v1/rest` | Where the bank is; point it at a stub in tests. |
 | `clock` | the system clock | The clock the rate limiting and `FioRateLimitException.retryAfter()` use. |
-| `maximumResponseSize` | 256 MiB | The most bytes of one answer the client reads; a longer answer fails instead of filling the heap. |
+| `maximumResponseSize` | 256 MiB | The most bytes of one answer the client reads, higher or lower; a longer answer fails instead of filling the heap. |
 
 A `FioClient` is immutable and safe to share between threads; requests through one client are serialised by its
 rate limit. Build one client per token and share it, because two clients with the same token do not know about
@@ -215,8 +224,8 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 
 - **One request per token per 30 seconds**, whatever the endpoint or format. The client keeps the interval between
   its own requests and, when the bank still answers HTTP 409, waits until the bank's retry time; only when the
-  wait would exceed `RateLimit.maximumWait()` does the request fail with `FioRateLimitException`, whose
-  `retryAfter()` says when the next request may go.
+  next slot would come later than `RateLimit.maximumWait()` after the call started (its HTTP exchanges included)
+  does the request fail with `FioRateLimitException`, whose `retryAfter()` says when the next request may go.
 - **90 days of history.** Data older than 90 days (counted from today, Prague time), movements, statements and
   card transactions alike, is available only for 10 minutes after the account holder unlocks the full history for
   the token in internet banking. Without it the bank answers HTTP 422, which becomes `FioHistoryLockedException`.
@@ -225,26 +234,27 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 - A wrong or expired token is HTTP 500 from the bank, which becomes `FioAuthorizationException`; so is a bank
   failure, so check that the bank is up before replacing a token that worked a moment ago.
 - A request that cannot be sent within the `RateLimit` is `FioRateLimitException` with an empty `statusCode()`.
-- An answer longer than 256 MiB is not read and fails with a plain `FioException`. The largest answer the bank
-  documents, 50 000 movements as JSON with every field at its longest, is about 254 MiB; a client that only
-  downloads short periods can lower the size with the builder's `maximumResponseSize`.
+- An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer the
+  bank documents, 50 000 movements as JSON with Czech text in every field at its longest, is about 254 MiB; text
+  with characters of three bytes or more in UTF-8 can make it longer. The builder's `maximumResponseSize` raises
+  the size for such answers, or lowers it for a client that only downloads short periods.
 
 ## Errors
 
 Every failure is a `FioException`, an unchecked exception with the HTTP status and the first 16 Ki characters
 (16 384) of the bank's response body (token masked); a value from the body that the message quotes is cut to its
-first 200 characters. The hierarchy is sealed, so a `switch` over it is exhaustive on Java 21 and newer:
+first 200 characters. The hierarchy is sealed, and the plain `FioException` is thrown too, so on Java 21 and
+newer a `switch` can name each subtype and ends with `case FioException e` for the rest:
 `FioRateLimitException`, `FioAuthorizationException`, `FioHistoryLockedException` (its `earliestAvailableDay()`
 reads the day the bank's answer names, when it names one), `FioTooManyTransactionsException`,
 `FioMalformedResponseException` (a success status with a body the client does not understand),
 `FioTransportException` (no answer: connection, TLS handshake, timeout, interruption; its
-`mayHaveReachedTheBank()` says whether the request may have gone out) and the plain `FioException` for any other
-status, or without a status for an answer over the size the client reads.
+`mayHaveReachedTheBank()` says whether the request may have gone out), `FioResponseTooLargeException` (an answer
+longer than the client reads, with its `limit()`) and the plain `FioException` for any other status.
 
-A `FioMalformedResponseException`, and a plain `FioException` for an answer over that size, come after the bank
-received the request and acted on it. A download by period or number can be asked again; after `sinceBookmark()`
-move the bookmark back before downloading again, and after a payment submission check the pending batches in
-internet banking before submitting again.
+When `mayHaveTakenEffect()` is true, the bank may have acted on the request: after a payment submission check the
+pending batches in internet banking before submitting again, and after `sinceBookmark()` move the bookmark back
+before downloading again. A download by period or number can simply be asked again.
 
 ## Compatibility
 
@@ -262,9 +272,12 @@ this:
   `TransactionColumn`, `Counterparty`, `Download` and the three payment orders, `DomesticPayment`, `EuroPayment`
   and `ForeignPayment`. Their accessors stay, but code that calls their canonical constructor or deconstructs
   them with a record pattern has to be revisited; construct the payment orders with their builders.
+- `FioException` may gain subtypes for failures that are a plain `FioException` until then. The class itself is
+  thrown too, so a `switch` over it names each subtype and ends with `case FioException e` for the rest, which
+  still catches a new subtype; a `catch` of the plain class does too.
 
-The sealed hierarchies `FioException`, `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes
-only in a major release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
+The sealed hierarchies `BankAccount`, `PaymentOrder` and `DownloadFormat` gain permitted subtypes only in a major
+release, so an exhaustive `switch` over them is safe. Everything else is stable in full, among it
 the value types `Money`, `DomesticAccount`, `ForeignAccount`, `StatementId`, `PaymentSymbols`, `Beneficiary`,
 `PaymentBatch`, `PaymentFile`, `FioToken` and `RateLimit`.
 
@@ -296,9 +309,9 @@ builder's `allowPlainHttp()`, called before or after `baseUri(...)`: `build()` c
 - `Download(mediaType, charset, content)` for a raw download; `asText()` decodes with the charset the bank named
   or, when it named none, the one Fio documents for the format (Windows-1250 for GPC, UTF-8 otherwise).
 
-A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code) is a `DomesticAccount`;
-anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the bank sends for some
-movements, is kept as `"0"`.
+A counterparty account that looks Czech (digits, optional prefix, a 4-digit bank code when the bank sends one) is
+a `DomesticAccount`; anything else, such as an IBAN, is a `ForeignAccount`. A variable symbol of `0`, which the
+bank sends for some movements, is kept as `"0"`.
 
 ## Documentation
 
