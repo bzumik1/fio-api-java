@@ -39,6 +39,9 @@ All notable changes to this library are recorded here. The format follows
 - Safety against a misbehaving network: an answer longer than 256 MiB (the builder's `maximumResponseSize`) is
   not read, the base URI has to be `https` with a host and without query or fragment (plain `http` only to a
   loopback address or after `allowPlainHttp()`), and a custom `HttpClient` must not follow redirects.
+- An error status is never refused for its size: the client keeps the first bytes of its body that the exception
+  needs, discards the rest, and throws the exception for that status, so a 409 over the limit is still a
+  `FioRateLimitException`.
 - Java 17, a JPMS module `io.github.bzumik1.fio`, JSpecify nullness annotations; the runtime dependencies are
   Jackson and the JSpecify annotations.
 

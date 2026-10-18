@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -135,11 +136,21 @@ final class FioHttp {
 
     private CompletableFuture<HttpResponse<byte[]>> sendAsync(HttpRequest request) {
         try {
-            return httpClient.sendAsync(request, info -> new BoundedBody(
-                    responseSizeLimit, info.headers().firstValueAsLong("Content-Length").orElse(0)));
+            return httpClient.sendAsync(request, this::body);
         } catch (RuntimeException e) {
             throw failed(request, e);
         }
+    }
+
+    private HttpResponse.BodySubscriber<byte[]> body(HttpResponse.ResponseInfo info) {
+        if (info.statusCode() / 100 != 2) {
+            return new ExcerptBody(excerptBytes());
+        }
+        return new BoundedBody(responseSizeLimit, info.headers().firstValueAsLong("Content-Length").orElse(0));
+    }
+
+    private int excerptBytes() {
+        return (FioException.RESPONSE_BODY_LIMIT + token.value().length()) * MAXIMUM_BYTES_PER_CHARACTER;
     }
 
     private FioException failed(HttpRequest request, Throwable cause) {
@@ -180,10 +191,9 @@ final class FioHttp {
     }
 
     private String maskedExcerpt(FioResponse response) {
-        int tokenLength = token.value().length();
-        int decodedBytes = (FioException.RESPONSE_BODY_LIMIT + tokenLength) * MAXIMUM_BYTES_PER_CHARACTER;
+        int decodedBytes = excerptBytes();
         String masked = token.maskExcerpt(response.text(decodedBytes));
-        if (response.body().length > decodedBytes && masked.length() < FioException.RESPONSE_BODY_LIMIT + tokenLength) {
+        if (response.body().length > decodedBytes && masked.length() < FioException.RESPONSE_BODY_LIMIT + token.value().length()) {
             masked = token.maskExcerpt(response.text());
         }
         return MalformedResponseException.excerpt(masked, FioException.RESPONSE_BODY_LIMIT);
@@ -265,6 +275,47 @@ final class FioHttp {
         @Override
         public void onComplete() {
             collector.onComplete();
+        }
+    }
+
+    private static final class ExcerptBody implements HttpResponse.BodySubscriber<byte[]> {
+
+        private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+        private final byte[] kept;
+        private int size;
+
+        private ExcerptBody(int bytes) {
+            this.kept = new byte[bytes];
+        }
+
+        @Override
+        public CompletableFuture<byte[]> getBody() {
+            return body;
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            subscription.request(Long.MAX_VALUE);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> buffers) {
+            for (ByteBuffer buffer : buffers) {
+                int length = Math.min(kept.length - size, buffer.remaining());
+                buffer.get(kept, size, length);
+                size += length;
+                buffer.position(buffer.limit());
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            body.completeExceptionally(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            body.complete(Arrays.copyOf(kept, size));
         }
     }
 

@@ -1,5 +1,7 @@
 package io.github.bzumik1.fio;
 
+import org.jspecify.annotations.Nullable;
+
 import javax.net.ssl.SSLSession;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -23,23 +25,29 @@ final class RecordingHttpClient extends HttpClientDouble {
     private final int status;
     private final Map<String, List<String>> headers;
     private final List<byte[]> parts;
+    private final @Nullable Throwable bodyFailure;
 
     RecordingHttpClient(int status, byte[] body) {
-        this(status, Map.of(), body.length == 0 ? List.of() : List.of(body.clone()));
+        this(status, Map.of(), body.length == 0 ? List.of() : List.of(body.clone()), null);
     }
 
-    private RecordingHttpClient(int status, Map<String, List<String>> headers, List<byte[]> parts) {
+    private RecordingHttpClient(int status, Map<String, List<String>> headers, List<byte[]> parts, @Nullable Throwable bodyFailure) {
         this.status = status;
         this.headers = Map.copyOf(headers);
         this.parts = List.copyOf(parts);
+        this.bodyFailure = bodyFailure;
     }
 
     static RecordingHttpClient answeringInParts(int status, List<byte[]> parts) {
-        return new RecordingHttpClient(status, Map.of(), parts);
+        return new RecordingHttpClient(status, Map.of(), parts, null);
     }
 
     static RecordingHttpClient answeringWithContentLength(int status, long contentLength, byte[] body) {
-        return new RecordingHttpClient(status, Map.of("Content-Length", List.of(Long.toString(contentLength))), List.of(body.clone()));
+        return new RecordingHttpClient(status, Map.of("Content-Length", List.of(Long.toString(contentLength))), List.of(body.clone()), null);
+    }
+
+    static RecordingHttpClient failingAfterPartOfBody(int status, byte[] partOfBody, Throwable failure) {
+        return new RecordingHttpClient(status, Map.of(), List.of(partOfBody.clone()), failure);
     }
 
     long deliveredBytes() {
@@ -73,7 +81,9 @@ final class RecordingHttpClient extends HttpClientDouble {
             delivered.addAndGet(part.length);
             subscriber.onNext(List.of(ByteBuffer.wrap(part)));
         }
-        if (!cancelled.get()) {
+        if (bodyFailure != null) {
+            subscriber.onError(bodyFailure);
+        } else if (!cancelled.get()) {
             subscriber.onComplete();
         }
         return subscriber.getBody().toCompletableFuture().thenApply(content -> new Response<>(request, status, headers, content));

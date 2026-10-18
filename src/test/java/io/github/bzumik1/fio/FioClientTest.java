@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -473,6 +474,58 @@ class FioClientTest {
         Download pdf = limited.statements().number(2026, 1).download(StatementFormat.PDF);
 
         assertThat(pdf.content()).hasSize(1024);
+    }
+
+    @Test
+    void should_raise_rate_limit_failure_with_the_beginning_of_the_body_when_refused_given_409_body_over_the_limit() {
+        FioClient limited = bank.builder().rateLimit(RateLimit.failFast()).maximumResponseSize(1024).build();
+        server().respondWith(409, "text/html", (SECRET + "z".repeat(100_000)).getBytes(StandardCharsets.UTF_8));
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> limited.transactions().sinceBookmark().fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioRateLimitException.class);
+        assertThat(failure.statusCode()).hasValue(409);
+        assertThat(failure.responseBody()).hasValue("***" + "z".repeat(FioException.RESPONSE_BODY_LIMIT - 3) + "\u2026");
+    }
+
+    @Test
+    void should_read_the_error_body_when_refused_given_content_length_over_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringWithContentLength(422, 1025, "zamčeno".getBytes(StandardCharsets.UTF_8));
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        FioException failure = catchThrowableOfType(FioException.class,
+                () -> limited.transactions().between(FROM, TO).fetch());
+
+        assertThat(failure).isExactlyInstanceOf(FioHistoryLockedException.class);
+        assertThat(failure.responseBody()).hasValue("zamčeno");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {200, 500})
+    void should_raise_transport_failure_that_may_have_reached_the_bank_when_downloading_given_body_broken_off(int status) {
+        RecordingHttpClient http = RecordingHttpClient.failingAfterPartOfBody(
+                status, "{\"accountStatement\":".getBytes(StandardCharsets.UTF_8), new IOException("Connection reset"));
+        FioClient client = bank.builder().httpClient(http).build();
+
+        FioTransportException failure = catchThrowableOfType(FioTransportException.class,
+                () -> client.transactions().sinceBookmark().fetch());
+
+        assertThat(failure).hasMessageContaining("Connection reset");
+        assertThat(failure.mayHaveReachedTheBank()).isTrue();
+    }
+
+    @Test
+    void should_keep_every_part_of_the_error_body_when_refused_given_parts_longer_together_than_the_limit() {
+        RecordingHttpClient http = RecordingHttpClient.answeringInParts(400, List.of(
+                "a".repeat(600).getBytes(StandardCharsets.UTF_8),
+                "b".repeat(600).getBytes(StandardCharsets.UTF_8),
+                "c".repeat(600).getBytes(StandardCharsets.UTF_8)));
+        FioClient limited = bank.builder().httpClient(http).maximumResponseSize(1024).build();
+
+        FioException failure = catchThrowableOfType(FioException.class, () -> limited.transactions().sinceBookmark().fetch());
+
+        assertThat(failure.getClass()).isEqualTo(FioException.class);
+        assertThat(failure.responseBody()).hasValue("a".repeat(600) + "b".repeat(600) + "c".repeat(600));
     }
 
     @ParameterizedTest

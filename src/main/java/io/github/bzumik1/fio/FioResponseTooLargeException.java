@@ -5,14 +5,15 @@ import org.jspecify.annotations.Nullable;
 import java.io.Serial;
 
 /**
- * The bank answered with more bytes than the client reads (256 MiB unless
+ * The bank answered with a success status and more bytes than the client reads (256 MiB unless
  * {@link FioClient.Builder#maximumResponseSize(int)} says otherwise), so the answer was not read. There is no
- * status code and no body.
+ * status code and no body. An error status is never this exception, however long its body: the client keeps the
+ * beginning of the body and throws the exception for that status.
  *
- * <p>The bank received the request and acted on it before it answered, so {@link #mayHaveTakenEffect()} is
- * {@code true}: a submitted batch may have been accepted, and {@link FioClient.Transactions#sinceBookmark()} may
- * have moved the bookmark. A download by period or number can be asked for a shorter period, or with a larger
- * limit.
+ * <p>The bank received the request and may have acted on it before it answered, so {@link #mayHaveTakenEffect()}
+ * is {@code true}: a submitted batch may have been accepted, and {@link FioClient.Transactions#sinceBookmark()} may
+ * have moved the bookmark. A download by period can be asked for a shorter period; any download can be asked again
+ * with a larger {@code maximumResponseSize}.
  */
 public final class FioResponseTooLargeException extends FioException {
 

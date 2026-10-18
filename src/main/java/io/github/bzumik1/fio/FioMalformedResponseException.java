@@ -9,9 +9,9 @@ import java.io.Serial;
  * JSON, XML or statement number, or a value in it that does not fit. The cause names what did not fit, and
  * {@link #responseBody()} holds the beginning of the body, so the answer can be reported.
  *
- * <p>The bank acted on the request before it answered, so {@link #mayHaveTakenEffect()} is {@code true}: check
- * the pending batches in Fio internet banking, or move the bookmark back, before trying again. A download by period
- * or number can simply be asked again, and most likely gets the same answer.
+ * <p>The bank may have acted on the request before it answered, so {@link #mayHaveTakenEffect()} is {@code true}:
+ * check the pending batches in Fio internet banking, or move the bookmark back, before trying again. A download by
+ * period or number can simply be asked again, and most likely gets the same answer.
  */
 public final class FioMalformedResponseException extends FioException {
 

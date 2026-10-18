@@ -582,8 +582,9 @@ public interface FioClient {
          * make it longer, and a client that expects such answers can go higher, while one that only ever downloads
          * short periods can go lower.
          *
-         * @param bytes the most bytes of one answer the client reads, positive; an answer longer than that fails
-         *        with a {@link FioResponseTooLargeException}
+         * @param bytes the most bytes of one answer the client reads, positive; an answer with a success status
+         *        longer than that fails with a {@link FioResponseTooLargeException}, while an error status keeps the
+         *        beginning of its body and is the exception for its status
          * @return this builder
          * @throws IllegalArgumentException when the size is not positive
          */

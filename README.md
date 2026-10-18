@@ -238,7 +238,9 @@ the literal loopback addresses `127.0.0.1` and `[::1]`, or anywhere after `allow
 - An answer longer than 256 MiB is not read and fails with `FioResponseTooLargeException`. The largest answer the
   bank documents, 50 000 movements as JSON with Czech text in every field at its longest, is about 254 MiB; text
   with characters of three bytes or more in UTF-8 can make it longer. The builder's `maximumResponseSize` raises
-  the size for such answers, or lowers it for a client that only downloads short periods.
+  the size for such answers, or lowers it for a client that only downloads short periods. The limit is for a
+  success status: an error status with a longer body keeps the beginning of it and is the exception for its
+  status.
 
 ## Errors
 
