@@ -1,19 +1,28 @@
 # Releasing
 
-A release is a signed git tag `vX.Y.Z` on `main`. The `Release` workflow checks the tag, runs the full build on
+A release is a git tag `vX.Y.Z` on `main`. The `Release` workflow checks the tag, runs the full build on
 Java 17, 21 and 25, builds and signs the artifacts, keeps a copy of them, publishes
-`io.github.bzumik1:fio-api:X.Y.Z` to Maven Central and creates the GitHub release with the version's changelog
-section as notes and the jars, their signatures and a build provenance attestation attached. Nothing else has
-to be done by hand.
+`io.github.bzumik1:fio-api:X.Y.Z` to Maven Central and completes the GitHub release with the version's
+changelog section as notes and the jars, their signatures and a build provenance attestation attached. Nothing
+else has to be done by hand.
+
+The tag is made on GitHub, once the changelog change below is on `main`: open
+[Releases → Draft a new release](https://github.com/bzumik1/fio-api-java/releases/new), type the tag
+`vX.Y.Z` into "Choose a tag" and pick "Create new tag on publish", leave the target at `main`, leave the title
+and the description empty (the workflow fills them from the changelog and would overwrite anything typed
+there) and click "Publish release". Publishing creates the tag, which starts the workflow; the release shows
+the notes and the files a few minutes later, when the workflow has finished. Only the repository owner can
+create such a tag (the `release-tags` ruleset).
+
+A terminal does the same, with a tag signed by the same GPG key that signs the artifacts (see the one-time
+setup below; `git tag -s` uses the key `user.signingkey` names in the git config, and `export GPG_TTY=$(tty)`
+lets gpg ask for the passphrase):
 
 ```
 git switch main && git pull
 git tag -s v1.0.0 -m "fio-api 1.0.0"
 git push origin v1.0.0
 ```
-
-The tag is signed with the same GPG key that signs the artifacts (see the one-time setup below); `git tag -s`
-uses the key `user.signingkey` names in the git config.
 
 Before tagging, in [CHANGELOG.md](../CHANGELOG.md):
 
@@ -103,8 +112,9 @@ The workflow has four jobs: the tag check, the build matrix, the publication and
 failed decides what to do.
 
 - **Tag check or build failed.** Nothing was published. A failed tag check usually means the changelog has no
-  section for the version. Fix `main`, delete the tag (`git push --delete origin vX.Y.Z` and `git tag -d
-  vX.Y.Z`) and tag again once the fix is in.
+  section for the version. Fix `main`, delete the tag (on GitHub, delete the release and then the tag under
+  Tags; in a terminal, `git push --delete origin vX.Y.Z` and `git tag -d vX.Y.Z`) and tag again once the fix
+  is in.
 - **Publication failed.** The job builds, then signs in a separate step (the only one, with the publishing
   step, that sees the key), uploads the jars and their `.asc` signatures as the workflow artifact `jars`, and
   only then publishes. Read the job log: a missing or expired secret, a key not found on the key server, or a
@@ -119,7 +129,8 @@ failed decides what to do.
   above.
 - **GitHub release failed** after a successful publication. The version is on Central and cannot be changed, so
   do not delete the tag. Re-run the failed job ("Re-run failed jobs" in the Actions tab): the release job
-  creates the GitHub release if it does not exist yet and skips it if it does. If the job cannot be re-run,
+  creates the GitHub release if it does not exist yet and otherwise gives the existing one (made on GitHub, or
+  by an earlier run) its title, notes and files. If the job cannot be re-run,
   create the release by hand from the `jars` artifact of the run (downloadable from the run's summary page for
   90 days) and the changelog section:
   ```
