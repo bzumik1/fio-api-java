@@ -8,7 +8,7 @@ All notable changes to this library are recorded here. The format follows
 
 ### Changed
 
-- Runtime dependencies: Jackson 3.1.2 → 3.2.4, JSpecify 1.0.0 → 1.0.1.
+- Runtime dependencies: Jackson 3.1.2 → 3.3.0, JSpecify 1.0.0 → 1.0.1.
 
 ## [1.0.0] - 2026-10-18
 
